@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/logging"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/gce_vm_image_export/exporter"
 )
 
@@ -42,14 +43,18 @@ var (
 	labels               = flag.String("labels", "", "List of label KEY=VALUE pairs to add. Keys must start with a lowercase character and contain only hyphens (-), underscores (_), lowercase characters, and numbers. Values must contain only hyphens (-), underscores (_), lowercase characters, and numbers.")
 )
 
-func main() {
+func mainExecutor()(map[string]string, map[string]string, error) {
 	flag.Parse()
 
 	currentExecutablePath := string(os.Args[0])
-	if err := exporter.Run(*clientID, *destinationURI, *sourceImage, *format, *project,
+	err := exporter.Run(*clientID, *destinationURI, *sourceImage, *format, *project,
 		*network, *subnet, *zone, *timeout, *scratchBucketGcsPath, *oauth, *ce, *gcsLogsDisabled,
-		*cloudLogsDisabled, *stdoutLogsDisabled, *labels, currentExecutablePath); err != nil {
+		*cloudLogsDisabled, *stdoutLogsDisabled, *labels, currentExecutablePath);``
+	return nil, nil, err //TODO
+}
 
-		log.Fatalf(err.Error())
+func main() {
+	if err := logging.RunWithServerLogging(mainExecutor); err != nil {
+		log.Fatal(err.Error())
 	}
 }
