@@ -49,7 +49,7 @@ func mainExecutor()(map[string]string, map[string]string, error) {
 	currentExecutablePath := string(os.Args[0])
 	err := exporter.Run(*clientID, *destinationURI, *sourceImage, *format, *project,
 		*network, *subnet, *zone, *timeout, *scratchBucketGcsPath, *oauth, *ce, *gcsLogsDisabled,
-		*cloudLogsDisabled, *stdoutLogsDisabled, *labels, currentExecutablePath);``
+		*cloudLogsDisabled, *stdoutLogsDisabled, *labels, currentExecutablePath);
 	return nil, nil, err //TODO
 }
 
