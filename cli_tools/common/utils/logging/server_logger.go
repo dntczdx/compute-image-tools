@@ -20,24 +20,26 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var(
 	httpClient = &http.Client{}
-	ServerUrl = ServerUrlTest // TODO
+	ServerUrl = ServerUrlProd // TODO
 )
 
 const(
 	ServerUrlProd = "https://play.googleapis.com/log"
-	ServerUrlTest = "https://jmt17.google.com/log"
+	ServerUrlTest = "http://localhost:27910/log"
 )
 
 // ServerLogger is responsible for logging to server
 type ServerLogger struct {
 	ServerUrl string
-
+	Id        string
 }
 
 // ServerLoggerInterface is server logger abstraction
@@ -48,66 +50,104 @@ type ServerLoggerInterface interface {
 
 // NewServerLogger creates a new server logger
 func NewServerLogger(serverUrl string) *ServerLogger {
-	return &ServerLogger{ServerUrl: serverUrl}
+	return &ServerLogger{
+		ServerUrl: serverUrl,
+		Id: uuid.New().String(),
+	}
 }
 
 // LogStart logs a "start" info to server
-func (l *ServerLogger) LogStart() {
-	logEvent := ImportExportLogEvent{
-		Status: "Start",
+func (l *ServerLogger) LogStart(params *ImportExportParamLog) {
+	logEvent := &ImportExportLogEvent{
+		Id:                   l.Id,
+		Status:               "Start",
+		ImportExportParamLog: params,
 	}
 
 	l.sendLogByHttp(logEvent)
 }
 
 // LogSuccess logs a "success" info to server
-func (l *ServerLogger) LogSuccess(params map[string]string, extraInfo map[string]string) {
-	// TODO
+func (l *ServerLogger) LogSuccess(extraInfo *map[string]string) {
+	logEvent := &ImportExportLogEvent{
+		Id:                   l.Id,
+		Status:               "Success",
+		ExtraInfo:            extraInfo,
+	}
+
+	l.sendLogByHttp(logEvent)
 }
 
 // LogFailure logs a "failure" info to server
-func (l *ServerLogger) LogFailure(reason string, params map[string]string, extraInfo map[string]string) {
-	// TODO
-}
-
-func RunWithServerLogging(function func()(map[string]string, map[string]string, error)) error {
-	sl := NewServerLogger(ServerUrl)
-	sl.LogStart()
-	if params, extraInfo, err := function(); err != nil {
-		sl.LogFailure(err.Error(), params, extraInfo)
-		return err
-	} else {
-		sl.LogSuccess(params, extraInfo)
-		return nil
+func (l *ServerLogger) LogFailure(reason string, extraInfo *map[string]string) {
+	logEvent := &ImportExportLogEvent{
+		Id:                   l.Id,
+		Status:               "Failure",
+		FailureReason:        reason,
+		ExtraInfo:            extraInfo,
 	}
+
+	l.sendLogByHttp(logEvent)
 }
 
-func (l *ServerLogger) sendLogByHttp(logEvent ImportExportLogEvent) {
+// RunWithServerLogging runs the function with server logging
+func RunWithServerLogging(params *ImportExportParamLog, function func()(*map[string]string, error)) error {
+	l := NewServerLogger(ServerUrl)
+
+	// Send log asynchronously. No need to interrupt the main flow when failed to send log, just
+	// keep moving.
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		l.LogStart(params)
+	} ()
+
+	var extraInfo *map[string]string
+	var err error
+	if extraInfo, err = function(); err != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.LogFailure(err.Error(), extraInfo)
+		} ()
+	} else {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			l.LogSuccess(extraInfo)
+		} ()
+	}
+
+	wg.Wait()
+	return err
+}
+
+func (l *ServerLogger) sendLogByHttp(logEvent *ImportExportLogEvent) {
 	logRequestJson, err := constructLogRequest(logEvent)
+	fmt.Println(">>>", string(logRequestJson)) // TODO: remove
 	if err != nil {
 		fmt.Println("Failed to log to server: failed to prepare json log data.")
 		return
 	}
 	resp, err := httpClient.Post(l.ServerUrl, "application/json", bytes.NewBuffer(logRequestJson))
-	defer resp.Body.Close()
 	if err != nil {
 		fmt.Println("Failed to log to server: ", err)
 		return
 	}
 
 	// TODO: remove
-	fmt.Println("Request:", string(logRequestJson))
-	fmt.Println("Logging status:", resp.Status)
-	body, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(body))
-	os.Exit(0)
+	defer resp.Body.Close()
+	respStr, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println(">>>", string(respStr))
 }
 
 type LogRequest struct {
 	ClientInfo ClientInfo `json:"client_info"`
 	LogSourceName string `json:"log_source_name"`
 	RequestTimeMs int64 `json:"request_time_ms"`
-	LogEvent LogEvent `json:"log_event"`
+	LogEvent []LogEvent `json:"log_event"`
 }
 
 type ClientInfo struct {
@@ -121,12 +161,24 @@ type LogEvent struct {
 	SourceExtensionJson string `json:"source_extension_json"`
 }
 
-// ImportExportLogEvent is align with clearcut server side configuration. It is the union of all APIs' log info.
+// ImportExportLogEvent is align with clearcut server side configuration.
 type ImportExportLogEvent struct {
-	Status string `json:"status"`
+	// This id is a random guid for correlation among multiple log lines of a single call
+	Id string `json:"id"`
+
+	Status        string `json:"status"`
+	FailureReason string `json:"failure_reason,omitempty"`
+	ExtraInfo     *map[string]string `json:"extra_info,omitempty"`
+
+	*ImportExportParamLog
 }
 
-func constructLogRequest(event ImportExportLogEvent)([]byte, error) {
+// ImportExportParamLog contains the union of all APIs' param info.
+type ImportExportParamLog struct {
+	ClientId string `json:"client_id"`
+}
+
+func constructLogRequest(event *ImportExportLogEvent)([]byte, error) {
 	eventStr, err := json.Marshal(event)
 	if err != nil {
 		return nil, err
@@ -140,10 +192,12 @@ func constructLogRequest(event ImportExportLogEvent)([]byte, error) {
 		},
 		LogSourceName: "CONCORD", //TODO
 		RequestTimeMs: now.Unix(),
-		LogEvent: LogEvent{
-			EventTimeMs: now.Unix(),
-			SequencePosition: 1,
-			SourceExtensionJson: string(eventStr), // TODO
+		LogEvent: []LogEvent{
+			{
+				EventTimeMs: now.Unix(),
+				SequencePosition: 1,
+				SourceExtensionJson: string(eventStr),
+			},
 		},
 	}
 

@@ -136,12 +136,15 @@ func runExportWorkflow(ctx context.Context, exportWorkflowPath string, varMap ma
 func Run(clientID string, destinationURI string, sourceImage string, format string,
 	project string, network string, subnet string, zone string, timeout string,
 	scratchBucketGcsPath string, oauth string, ce string, gcsLogsDisabled bool,
-	cloudLogsDisabled bool, stdoutLogsDisabled bool, labels string, currentExecutablePath string) error {
+	cloudLogsDisabled bool, stdoutLogsDisabled bool, labels string, currentExecutablePath string) (*map[string]string, error) {
+
+	// TODO: collect extra info. Including: size(GB) of source / dest.
+	extraInfo := &map[string]string{}
 
 	var userLabels map[string]string
 	var err error
 	if userLabels, err = validateAndParseFlags(clientID, destinationURI, sourceImage, labels); err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	ctx := context.Background()
@@ -149,21 +152,21 @@ func Run(clientID string, destinationURI string, sourceImage string, format stri
 	storageClient, err := storage.NewStorageClient(
 		ctx, logging.NewLogger("[image-export]"), oauth)
 	if err != nil {
-		return fmt.Errorf("error creating storage client %v", err)
+		return extraInfo, fmt.Errorf("error creating storage client %v", err)
 	}
 	defer storageClient.Close()
 
 	scratchBucketCreator := storage.NewScratchBucketCreator(ctx, storageClient)
 	zoneRetriever, err := storage.NewZoneRetriever(metadataGCE, param.CreateComputeClient(&ctx, oauth, ce))
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	region := new(string)
 	err = param.PopulateMissingParameters(&project, &zone, region, &scratchBucketGcsPath,
 		destinationURI, metadataGCE, scratchBucketCreator, zoneRetriever, storageClient)
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	varMap := buildDaisyVars(destinationURI, sourceImage, format, network, subnet, *region)
@@ -171,7 +174,7 @@ func Run(clientID string, destinationURI string, sourceImage string, format stri
 	if err := runExportWorkflow(ctx, getWorkflowPath(format, currentExecutablePath), varMap, project,
 		zone, timeout, scratchBucketGcsPath, oauth, ce, gcsLogsDisabled, cloudLogsDisabled,
 		stdoutLogsDisabled, userLabels); err != nil {
-		return err
+		return extraInfo, err
 	}
-	return nil
+	return extraInfo, nil
 }
