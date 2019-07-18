@@ -135,12 +135,15 @@ func runExportWorkflow(ctx context.Context, exportWorkflowPath string, varMap ma
 // Run runs export workflow.
 func Run(clientID, destinationURI, sourceImage, format, project, network, subnet, zone, timeout,
 	scratchBucketGcsPath, oauth, ce string, gcsLogsDisabled, cloudLogsDisabled,
-	stdoutLogsDisabled bool, labels, currentExecutablePath string) error {
+	stdoutLogsDisabled bool, labels, currentExecutablePath string) (*map[string]string, error) {
+
+	// TODO: collect extra info. Including: size(GB) of source / dest.
+	extraInfo := &map[string]string{}
 
 	var userLabels map[string]string
 	var err error
 	if userLabels, err = validateAndParseFlags(clientID, destinationURI, sourceImage, labels); err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	ctx := context.Background()
@@ -148,21 +151,21 @@ func Run(clientID, destinationURI, sourceImage, format, project, network, subnet
 	storageClient, err := storage.NewStorageClient(
 		ctx, logging.NewLogger("[image-export]"), oauth)
 	if err != nil {
-		return fmt.Errorf("error creating storage client %v", err)
+		return extraInfo, fmt.Errorf("error creating storage client %v", err)
 	}
 	defer storageClient.Close()
 
 	scratchBucketCreator := storage.NewScratchBucketCreator(ctx, storageClient)
 	zoneRetriever, err := storage.NewZoneRetriever(metadataGCE, param.CreateComputeClient(&ctx, oauth, ce))
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	region := new(string)
 	err = param.PopulateMissingParameters(&project, &zone, region, &scratchBucketGcsPath,
 		destinationURI, metadataGCE, scratchBucketCreator, zoneRetriever, storageClient)
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	varMap := buildDaisyVars(destinationURI, sourceImage, format, network, subnet, *region)
@@ -170,7 +173,7 @@ func Run(clientID, destinationURI, sourceImage, format, project, network, subnet
 	if err := runExportWorkflow(ctx, getWorkflowPath(format, currentExecutablePath), varMap, project,
 		zone, timeout, scratchBucketGcsPath, oauth, ce, gcsLogsDisabled, cloudLogsDisabled,
 		stdoutLogsDisabled, userLabels); err != nil {
-		return err
+		return extraInfo, err
 	}
-	return nil
+	return extraInfo, nil
 }
