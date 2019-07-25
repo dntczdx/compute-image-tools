@@ -43,12 +43,11 @@ var (
 	labels               = flag.String("labels", "", "List of label KEY=VALUE pairs to add. Keys must start with a lowercase character and contain only hyphens (-), underscores (_), lowercase characters, and numbers. Values must contain only hyphens (-), underscores (_), lowercase characters, and numbers.")
 )
 
-func mainExecutor() (*map[string]string, error) {
+func exportEntry() (*map[string]string, error) {
 	currentExecutablePath := string(os.Args[0])
-	extraInfo, err := exporter.Run(*clientID, *destinationURI, *sourceImage, *format, *project,
+	return exporter.Run(*clientID, *destinationURI, *sourceImage, *format, *project,
 		*network, *subnet, *zone, *timeout, *scratchBucketGcsPath, *oauth, *ce, *gcsLogsDisabled,
 		*cloudLogsDisabled, *stdoutLogsDisabled, *labels, currentExecutablePath)
-	return extraInfo, err
 }
 
 func main() {
@@ -56,9 +55,19 @@ func main() {
 
 	paramLog := &logging.ImportExportParamLog{
 		ClientId: *clientID,
+		Network: *network,
+		Subnet: *subnet,
+		Zone: *zone,
+		Timeout: *timeout,
+		Project: *project,
+		Labels: *labels,
+		SourceImage: *sourceImage,
+
+		DestinationUri: *destinationURI,
+		Format: *format,
 	}
 
-	if err := logging.RunWithServerLogging(paramLog, mainExecutor); err != nil {
+	if err := logging.RunWithServerLogging(logging.ImageExportAction, paramLog, exportEntry); err != nil {
 		log.Fatal(err.Error())
 	}
 }

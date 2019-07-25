@@ -20,6 +20,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/logging"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/gce_vm_image_import/importer"
 )
 
@@ -53,17 +54,39 @@ var (
 	labels               = flag.String("labels", "", "List of label KEY=VALUE pairs to add. Keys must start with a lowercase character and contain only hyphens (-), underscores (_), lowercase characters, and numbers. Values must contain only hyphens (-), underscores (_), lowercase characters, and numbers.")
 )
 
-func main() {
-	flag.Parse()
-
+func importEntry() (*map[string]string, error) {
 	currentExecutablePath := string(os.Args[0])
-
-	if err := importer.Run(*clientID, *imageName, *dataDisk, *osID, *customTranWorkflow, *sourceFile,
+	return importer.Run(*clientID, *imageName, *dataDisk, *osID, *customTranWorkflow, *sourceFile,
 		*sourceImage, *noGuestEnvironment, *family, *description, *network, *subnet, *zone, *timeout,
 		*project, *scratchBucketGcsPath, *oauth, *ce, *gcsLogsDisabled, *cloudLogsDisabled,
 		*stdoutLogsDisabled, *kmsKey, *kmsKeyring, *kmsLocation, *kmsProject, *noExternalIP,
-		*labels, currentExecutablePath); err != nil {
+		*labels, currentExecutablePath);
+}
 
-		log.Fatal(err)
+func main() {
+	flag.Parse()
+
+	paramLog := &logging.ImportExportParamLog{
+		ClientId: *clientID,
+		Network: *network,
+		Subnet: *subnet,
+		Zone: *zone,
+		Timeout: *timeout,
+		Project: *project,
+		Labels: *labels,
+		SourceImage: *sourceImage,
+
+		ImageName: *imageName,
+		DataDisk: *dataDisk,
+		OS: *osID,
+		SourceFile: *sourceFile,
+		NoGuestEnvironment: *noGuestEnvironment,
+		Family: *family,
+		Description: *description,
+		NoExternalIp: *noExternalIP,
+	}
+
+	if err := logging.RunWithServerLogging(logging.ImageImportAction, paramLog, importEntry); err != nil {
+		log.Fatal(err.Error())
 	}
 }

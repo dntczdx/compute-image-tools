@@ -212,12 +212,15 @@ func Run(clientID, imageName string, dataDisk bool, osID, customTranWorkflow, so
 	sourceImage string, noGuestEnvironment bool, family, description, network, subnet, zone, timeout,
 	project, scratchBucketGcsPath, oauth, ce string, gcsLogsDisabled, cloudLogsDisabled,
 	stdoutLogsDisabled bool, kmsKey, kmsKeyring, kmsLocation, kmsProject string, noExternalIP bool,
-	labels, currentExecutablePath string) error {
+	labels, currentExecutablePath string) (*map[string]string, error) {
+
+	// TODO: collect extra info. Including: size(GB) of source / dest.
+	extraInfo := &map[string]string{}
 
 	sourceBucketName, sourceObjectName, userLabels, err := validateAndParseFlags(clientID, imageName,
 		sourceFile, sourceImage, dataDisk, osID, customTranWorkflow, labels)
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	ctx := context.Background()
@@ -225,21 +228,21 @@ func Run(clientID, imageName string, dataDisk bool, osID, customTranWorkflow, so
 	storageClient, err := storage.NewStorageClient(
 		ctx, logging.NewLogger("[image-import]"), oauth)
 	if err != nil {
-		return fmt.Errorf("error creating storage client: %v", err)
+		return extraInfo, fmt.Errorf("error creating storage client: %v", err)
 	}
 	defer storageClient.Close()
 
 	scratchBucketCreator := storage.NewScratchBucketCreator(ctx, storageClient)
 	zoneRetriever, err := storage.NewZoneRetriever(metadataGCE, param.CreateComputeClient(&ctx, oauth, ce))
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	region := new(string)
 	err = param.PopulateMissingParameters(&project, &zone, region, &scratchBucketGcsPath,
 		sourceFile, metadataGCE, scratchBucketCreator, zoneRetriever, storageClient)
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	if sourceFile != "" {
@@ -247,7 +250,7 @@ func Run(clientID, imageName string, dataDisk bool, osID, customTranWorkflow, so
 	}
 
 	if err != nil {
-		return err
+		return extraInfo, err
 	}
 
 	importWorkflowPath, translateWorkflowPath := getWorkflowPaths(dataDisk, osID, sourceImage,
@@ -260,7 +263,7 @@ func Run(clientID, imageName string, dataDisk bool, osID, customTranWorkflow, so
 		oauth, ce, gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled, kmsKey, kmsKeyring,
 		kmsLocation, kmsProject, noExternalIP, userLabels); err != nil {
 
-		return err
+		return extraInfo, err
 	}
-	return nil
+	return extraInfo, nil
 }

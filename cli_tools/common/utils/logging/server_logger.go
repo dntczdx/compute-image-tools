@@ -28,18 +28,23 @@ import (
 
 var(
 	httpClient = &http.Client{}
-	ServerUrl = ServerUrlProd // TODO
+	ServerUrl = ServerUrlTest // TODO
 )
 
 const(
 	ServerUrlProd = "https://play.googleapis.com/log"
 	ServerUrlTest = "http://localhost:27910/log"
+	ImageImportAction = "ImageImport"
+	ImageExportAction = "ImageExport"
+	InstanceImportAction = "InstanceImport"
 )
 
 // ServerLogger is responsible for logging to server
 type ServerLogger struct {
 	ServerUrl string
 	Id        string
+	Action    string
+	Params    *ImportExportParamLog
 }
 
 // ServerLoggerInterface is server logger abstraction
@@ -49,19 +54,22 @@ type ServerLoggerInterface interface {
 }
 
 // NewServerLogger creates a new server logger
-func NewServerLogger(serverUrl string) *ServerLogger {
+func NewServerLogger(serverUrl string, action string, params *ImportExportParamLog) *ServerLogger {
 	return &ServerLogger{
 		ServerUrl: serverUrl,
 		Id: uuid.New().String(),
+		Action: action,
+		Params: params,
 	}
 }
 
 // LogStart logs a "start" info to server
-func (l *ServerLogger) LogStart(params *ImportExportParamLog) {
+func (l *ServerLogger) LogStart() {
 	logEvent := &ImportExportLogEvent{
 		Id:                   l.Id,
+		Action:               l.Action,
+		ImportExportParamLog: l.Params,
 		Status:               "Start",
-		ImportExportParamLog: params,
 	}
 
 	l.sendLogByHttp(logEvent)
@@ -71,6 +79,8 @@ func (l *ServerLogger) LogStart(params *ImportExportParamLog) {
 func (l *ServerLogger) LogSuccess(extraInfo *map[string]string) {
 	logEvent := &ImportExportLogEvent{
 		Id:                   l.Id,
+		Action:               l.Action,
+		ImportExportParamLog: l.Params,
 		Status:               "Success",
 		ExtraInfo:            extraInfo,
 	}
@@ -82,6 +92,8 @@ func (l *ServerLogger) LogSuccess(extraInfo *map[string]string) {
 func (l *ServerLogger) LogFailure(reason string, extraInfo *map[string]string) {
 	logEvent := &ImportExportLogEvent{
 		Id:                   l.Id,
+		Action:               l.Action,
+		ImportExportParamLog: l.Params,
 		Status:               "Failure",
 		FailureReason:        reason,
 		ExtraInfo:            extraInfo,
@@ -91,8 +103,8 @@ func (l *ServerLogger) LogFailure(reason string, extraInfo *map[string]string) {
 }
 
 // RunWithServerLogging runs the function with server logging
-func RunWithServerLogging(params *ImportExportParamLog, function func()(*map[string]string, error)) error {
-	l := NewServerLogger(ServerUrl)
+func RunWithServerLogging(action string, params *ImportExportParamLog, function func()(*map[string]string, error)) error {
+	l := NewServerLogger(ServerUrl, action, params)
 
 	// Send log asynchronously. No need to interrupt the main flow when failed to send log, just
 	// keep moving.
@@ -101,7 +113,7 @@ func RunWithServerLogging(params *ImportExportParamLog, function func()(*map[str
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		l.LogStart(params)
+		l.LogStart()
 	} ()
 
 	var extraInfo *map[string]string
@@ -166,6 +178,7 @@ type ImportExportLogEvent struct {
 	// This id is a random guid for correlation among multiple log lines of a single call
 	Id string `json:"id"`
 
+	Action        string `json:"action"`
 	Status        string `json:"status"`
 	FailureReason string `json:"failure_reason,omitempty"`
 	ExtraInfo     *map[string]string `json:"extra_info,omitempty"`
@@ -173,9 +186,34 @@ type ImportExportLogEvent struct {
 	*ImportExportParamLog
 }
 
-// ImportExportParamLog contains the union of all APIs' param info.
+// ImportExportParamLog contains the union of all APIs' param info. To simplify logging service, we
+// avoid defining different schemas for each API.
 type ImportExportParamLog struct {
+	// Common fields
 	ClientId string `json:"client_id"`
+	Network string `json:"network"`
+	Subnet string `json:"subnet"`
+	Zone string `json:"zone"`
+	Timeout string `json:"timeout"`
+	Project string `json:"project"`
+	Labels string `json:"labels"`
+	SourceImage string `json:"source_image"`
+
+	// Image import fields
+	ImageName string `json:"image_name"`
+	DataDisk bool `json:"data_disk"`
+	OS string `json:"os"`
+	SourceFile string `json:"source_file"`
+	NoGuestEnvironment bool `json:"no_guest_environment"`
+	Family string `json:"no_guest_environment"`
+	Description string `json:"description"`
+	NoExternalIp bool `json:"no_external_ip"`
+
+	// Image export fields
+	DestinationUri string `json:"destination_uri"`
+	Format string `json:"format"`
+
+	// Instance import fields
 }
 
 func constructLogRequest(event *ImportExportLogEvent)([]byte, error) {
