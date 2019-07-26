@@ -25,6 +25,13 @@ DISKNAME="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/disk_name)"
 ME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
 ZONE=$(curl -f -H Metadata-Flavor:Google ${URL}/zone)
 
+CLEANUP_SH_FILE="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/cleanup_sh_file)"
+GS_PATH=$(curl -f -H Metadata-Flavor:Google ${URL}/gcs-path)
+# Strip gs://
+IMAGE_OUTPUT_PATH=${GS_PATH##*//}
+# Get dir for output
+OUTS_PATH=${IMAGE_OUTPUT_PATH%/*}
+
 # Print info.
 echo "#################" 2> /dev/null
 echo "# Configuration #" 2> /dev/null
@@ -35,6 +42,20 @@ echo "SOURCEPATH: ${SOURCEPATH}" 2> /dev/null
 echo "DISKNAME: ${DISKNAME}" 2> /dev/null
 echo "ME: ${ME}" 2> /dev/null
 echo "ZONE: ${ZONE}" 2> /dev/null
+
+# Fetch cleanup script from GCS
+CLEANUP_SH_FILE_GCS_PATH=gs://${OUTS_PATH%/*}/sources/${CLEANUP_SH_FILE}
+CLEANUP_SH_FILE_LOCAL_PATH=./${CLEANUP_SH_FILE}
+echo "GCEExport: Copying cleanup script..."
+if ! out=$(gsutil cp "${CLEANUP_SH_FILE_GCS_PATH}" "${CLEANUP_SH_FILE_LOCAL_PATH}" 2>&1); then
+  echo "ExportFailed: Failed to copy cleanup script. Error: ${out}"
+  exit
+fi
+echo ${out}
+
+echo "GCEExport: Launching cleanup script in background..."
+chmod +x ${CLEANUP_SH_FILE_LOCAL_PATH}
+${CLEANUP_SH_FILE_LOCAL_PATH} &
 
 # Mount GCS bucket containing the disk image.
 mkdir -p /gcs/${SOURCEBUCKET}
