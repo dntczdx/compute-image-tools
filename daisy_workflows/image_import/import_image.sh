@@ -26,11 +26,9 @@ ME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
 ZONE=$(curl -f -H Metadata-Flavor:Google ${URL}/zone)
 
 CLEANUP_SH_FILE="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/cleanup_sh_file)"
-GS_PATH=$(curl -f -H Metadata-Flavor:Google ${URL}/gcs-path)
+GS_PATH=$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/gcs-path)
 # Strip gs://
-IMAGE_OUTPUT_PATH=${GS_PATH##*//}
-# Get dir for output
-OUTS_PATH=${IMAGE_OUTPUT_PATH%/*}
+OUTPUT_PATH=${GS_PATH##*//}
 
 # Print info.
 echo "#################" 2> /dev/null
@@ -44,7 +42,7 @@ echo "ME: ${ME}" 2> /dev/null
 echo "ZONE: ${ZONE}" 2> /dev/null
 
 # Fetch cleanup script from GCS
-CLEANUP_SH_FILE_GCS_PATH=gs://${OUTS_PATH%/*}/sources/${CLEANUP_SH_FILE}
+CLEANUP_SH_FILE_GCS_PATH=gs://${OUTPUT_PATH%/*}/sources/${CLEANUP_SH_FILE}
 CLEANUP_SH_FILE_LOCAL_PATH=./${CLEANUP_SH_FILE}
 echo "GCEExport: Copying cleanup script..."
 if ! out=$(gsutil cp "${CLEANUP_SH_FILE_GCS_PATH}" "${CLEANUP_SH_FILE_LOCAL_PATH}" 2>&1); then

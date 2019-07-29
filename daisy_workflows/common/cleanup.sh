@@ -20,8 +20,19 @@ set -x
 # step 3: sleep timeout+5min and delete self
 
 
-sleep 60s
+sleep 20s
 echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
-export NAME=$(curl -X GET http://metadata.google.internal/computeMetadata/v1/instance/name -H 'Metadata-Flavor: Google')
-export ZONE=$(curl -X GET http://metadata.google.internal/computeMetadata/v1/instance/zone -H 'Metadata-Flavor: Google')
+NAME=$(curl -X GET http://metadata.google.internal/computeMetadata/v1/instance/name -H 'Metadata-Flavor: Google')
+ZONE=$(curl -X GET http://metadata.google.internal/computeMetadata/v1/instance/zone -H 'Metadata-Flavor: Google')
+DISK=$(curl -X GET http://metadata.google.internal/computeMetadata/v1/instance/disks/ -H 'Metadata-Flavor: Google')
+DEVICES=$(curl "http://metadata.google.internal/computeMetadata/v1/instance/disks/?recursive=true&alt=text" -H "Metadata-Flavor: Google" | grep '/device-name ' | sed -e 's/\(.*\/device-name \)*//g')
+DEVICES=$(echo $DEVICES)
+echo "GCEExport: connecting disks '$DEVICES' with instance '$NAME'"
+IFS=$' ' read -r -a DEVICE_ARR <<< "$DEVICES"
+for DEVICE in "${DEVICE_ARR[@]}"
+do
+:
+  gcloud --quiet compute instances set-disk-auto-delete $NAME --device-name=$DEVICE --zone=$ZONE
+done
+
 gcloud --quiet compute instances delete $NAME --zone=$ZONE

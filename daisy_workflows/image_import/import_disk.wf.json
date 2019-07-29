@@ -57,7 +57,8 @@
             "block-project-ssh-keys": "true",
             "disk_name": "${disk_name}",
             "source_disk_file": "${source_disk_file}",
-            "cleanup_sh_file": "${cleanup.sh}"
+            "cleanup_sh_file": "cleanup.sh",
+            "gcs-path": "${OUTSPATH}"
           },
           "networkInterfaces": [
             {
