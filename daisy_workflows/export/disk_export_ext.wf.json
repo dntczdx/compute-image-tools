@@ -70,7 +70,8 @@
             "gcs-path": "${OUTSPATH}/${NAME}",
             "format": "${format}",
             "buffer-disk": "disk-${NAME}-buffer-${ID}",
-            "resizing-script-name": "${NAME}_disk_resizing_mon.sh"
+            "resizing-script-name": "${NAME}_disk_resizing_mon.sh",
+            "timeout": "${TIMEOUT}"
           },
           "networkInterfaces": [
             {

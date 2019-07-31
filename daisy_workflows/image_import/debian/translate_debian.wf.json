@@ -54,7 +54,8 @@
             "script": "translate.py",
             "prefix": "Translate",
             "debian_release": "${debian_release}",
-            "install_gce_packages": "${install_gce_packages}"
+            "install_gce_packages": "${install_gce_packages}",
+            "timeout": "${TIMEOUT}"
           },
           "networkInterfaces": [
             {

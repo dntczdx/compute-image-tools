@@ -15,6 +15,40 @@
 
 set -x
 
+delayed_cleanup() {
+  set -x
+  echo "GCEExport: preparing for cleaning up..."
+  local URL="http://metadata/computeMetadata/v1/instance"
+
+  # Sleep 10 more min after timeout before trying to do cleanup, because regular cleanup is not
+  # triggered from here. This is just the plan B to avoid left artifacts when workflow failed to
+  # trigger its auto cleanup.
+  local TIMEOUT="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/timeout)"
+  sleep $TIMEOUT
+  #sleep 600
+
+  echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
+
+  local NAME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
+  local ZONE="$(curl -f -H Metadata-Flavor:Google ${URL}/zone)"
+  local DEVICES="$(curl -H Metadata-Flavor:Google ${URL}/disks/?recursive=true'&'alt=text | grep '/device-name ' | sed -e 's/\(.*\/device-name \)*//g')"
+  local DEVICES=$(echo $DEVICES)
+
+  echo "GCEExport: set auto-delete for disks '$DEVICES' with instance '$NAME'"
+  IFS=$' ' read -r -a DEVICE_ARR <<< "$DEVICES"
+  #IFS=" " set -A DEVICE_ARR "$DEVICES"
+  for DEVICE in "${DEVICE_ARR[@]}"
+  do
+  :
+    gcloud --quiet compute instances set-disk-auto-delete $NAME --device-name=$DEVICE --zone=$ZONE
+  done
+
+  echo "GCEExport: delete instance"
+  gcloud --quiet compute instances delete $NAME --zone=$ZONE
+}
+
+delayed_cleanup &
+
 URL="http://metadata/computeMetadata/v1/instance"
 DAISY_SOURCE_URL="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/daisy-sources-path)"
 SOURCE_DISK_FILE="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/source_disk_file)"
@@ -24,11 +58,6 @@ SOURCEPATH="${SOURCEURL#"gs://"}"
 DISKNAME="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/disk_name)"
 ME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
 ZONE=$(curl -f -H Metadata-Flavor:Google ${URL}/zone)
-
-CLEANUP_SH_FILE="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/cleanup_sh_file)"
-GS_PATH=$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/gcs-path)
-# Strip gs://
-OUTPUT_PATH=${GS_PATH##*//}
 
 # Print info.
 echo "#################" 2> /dev/null
@@ -40,20 +69,6 @@ echo "SOURCEPATH: ${SOURCEPATH}" 2> /dev/null
 echo "DISKNAME: ${DISKNAME}" 2> /dev/null
 echo "ME: ${ME}" 2> /dev/null
 echo "ZONE: ${ZONE}" 2> /dev/null
-
-# Fetch cleanup script from GCS
-CLEANUP_SH_FILE_GCS_PATH=gs://${OUTPUT_PATH%/*}/sources/${CLEANUP_SH_FILE}
-CLEANUP_SH_FILE_LOCAL_PATH=./${CLEANUP_SH_FILE}
-echo "GCEExport: Copying cleanup script..."
-if ! out=$(gsutil cp "${CLEANUP_SH_FILE_GCS_PATH}" "${CLEANUP_SH_FILE_LOCAL_PATH}" 2>&1); then
-  echo "ExportFailed: Failed to copy cleanup script. Error: ${out}"
-  exit
-fi
-echo ${out}
-
-echo "GCEExport: Launching cleanup script in background..."
-chmod +x ${CLEANUP_SH_FILE_LOCAL_PATH}
-${CLEANUP_SH_FILE_LOCAL_PATH} &
 
 # Mount GCS bucket containing the disk image.
 mkdir -p /gcs/${SOURCEBUCKET}

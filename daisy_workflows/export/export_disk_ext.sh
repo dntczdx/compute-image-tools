@@ -14,6 +14,38 @@
 # limitations under the License.
 set -x
 
+delayed_cleanup() {
+  echo "GCEExport: preparing for cleaning up..."
+  local URL="http://metadata/computeMetadata/v1/instance"
+
+  # Sleep 10 more min after timeout before trying to do cleanup, because regular cleanup is not
+  # triggered from here. This is just the plan B to avoid left artifacts when workflow failed to
+  # trigger its auto cleanup.
+  local TIMEOUT="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/timeout)"
+  sleep $TIMEOUT
+  sleep 600
+
+  echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
+
+  local NAME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
+  local ZONE="$(curl -f -H Metadata-Flavor:Google ${URL}/zone)"
+  local DEVICES="$(curl -f -H Metadata-Flavor:Google ${URL}/disks/?recursive=true&alt=text | grep '/device-name ' | sed -e 's/\(.*\/device-name \)*//g')"
+  local DEVICES=$(echo $DEVICES)
+
+  echo "GCEExport: set auto-delete for disks '$DEVICES' with instance '$NAME'"
+  IFS=$' ' read -r -a DEVICE_ARR <<< "$DEVICES"
+  for DEVICE in "${DEVICE_ARR[@]}"
+  do
+  :
+    gcloud --quiet compute instances set-disk-auto-delete $NAME --device-name=$DEVICE --zone=$ZONE
+  done
+
+  echo "GCEExport: delete instance"
+  gcloud --quiet compute instances delete $NAME --zone=$ZONE
+}
+
+delayed_cleanup &
+
 BYTES_1GB=1073741824
 URL="http://metadata/computeMetadata/v1/instance/attributes"
 GS_PATH=$(curl -f -H Metadata-Flavor:Google ${URL}/gcs-path)

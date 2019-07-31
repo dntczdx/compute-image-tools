@@ -381,6 +381,13 @@ func (w *Workflow) populate(ctx context.Context) dErr {
 		}
 	}
 
+	// Parse timeout.
+	timeout, err := time.ParseDuration(w.DefaultTimeout)
+	if err != nil {
+		return newErr(err)
+	}
+	w.defaultTimeout = timeout
+
 	// Set some generic autovars and run first round of var substitution.
 	cwd, _ := os.Getwd()
 	now := time.Now().UTC()
@@ -394,6 +401,7 @@ func (w *Workflow) populate(ctx context.Context) dErr {
 		"USERNAME":  w.username,
 		"WFDIR":     w.workflowDir,
 		"CWD":       cwd,
+		"TIMEOUT":   strconv.FormatInt(int64(timeout.Seconds()), 10),
 	}
 
 	var replacements []string
@@ -404,13 +412,6 @@ func (w *Workflow) populate(ctx context.Context) dErr {
 		replacements = append(replacements, fmt.Sprintf("${%s}", k), v.Value)
 	}
 	substitute(reflect.ValueOf(w).Elem(), strings.NewReplacer(replacements...))
-
-	// Parse timeout.
-	timeout, err := time.ParseDuration(w.DefaultTimeout)
-	if err != nil {
-		return newErr(err)
-	}
-	w.defaultTimeout = timeout
 
 	// Set up GCS paths.
 	if w.GCSPath == "" {

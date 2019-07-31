@@ -26,8 +26,7 @@
   },
   "Sources": {
     "import_image.sh": "./import_image.sh",
-    "source_disk_file": "${source_disk_file}",
-    "cleanup.sh": "../common/cleanup.sh"
+    "source_disk_file": "${source_disk_file}"
   },
   "Steps": {
     "setup-disks": {
@@ -57,8 +56,8 @@
             "block-project-ssh-keys": "true",
             "disk_name": "${disk_name}",
             "source_disk_file": "${source_disk_file}",
-            "cleanup_sh_file": "cleanup.sh",
-            "gcs-path": "${OUTSPATH}"
+            "gcs-path": "${OUTSPATH}",
+            "timeout": "${TIMEOUT}"
           },
           "networkInterfaces": [
             {
