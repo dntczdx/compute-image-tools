@@ -18,7 +18,7 @@ set -x
 delayed_cleanup() {
   set -x
   echo "GCEExport: preparing for cleaning up..."
-  local URL="http://metadata/computeMetadata/v1/instance"
+  local URL="http://metadata.google.internal/computeMetadata/v1/instance"
 
   # Sleep 10 more min after timeout before trying to do cleanup, because regular cleanup is not
   # triggered from here. This is just the plan B to avoid left artifacts when workflow failed to
@@ -35,8 +35,8 @@ delayed_cleanup() {
   local DEVICES=$(echo $DEVICES)
 
   echo "GCEExport: set auto-delete for disks '$DEVICES' with instance '$NAME'"
-  IFS=$' ' read -r -a DEVICE_ARR <<< "$DEVICES"
-  #IFS=" " set -A DEVICE_ARR "$DEVICES"
+  IFS=' '
+  DEVICE_ARR=($DEVICES)
   for DEVICE in "${DEVICE_ARR[@]}"
   do
   :

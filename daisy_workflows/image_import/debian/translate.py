@@ -104,24 +104,28 @@ def main():
           # triggered from here. This is just the plan B to avoid left artifacts when workflow failed to
           # trigger its auto cleanup.
           local TIMEOUT="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/timeout)"
+          echo timeout-- $TIMEOUT
           sleep $TIMEOUT
           #sleep 600
         
           echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
         
           local NAME="$(curl -f -H Metadata-Flavor:Google ${URL}/name)"
+          echo name-- $NAME
           local ZONE="$(curl -f -H Metadata-Flavor:Google ${URL}/zone)"
-          local DEVICES="$(curl -H Metadata-Flavor:Google \"${URL}/disks/?recursive=true&alt=text\" | grep '/device-name ' | sed -e 's/\(.*\/device-name \)*//g')"
+          echo zone-- $ZONE
+          local DEVICES="$(curl -H Metadata-Flavor:Google ${URL}/disks/?recursive=true'&'alt=text | grep '/device-name ' | sed -e 's/\(.*\/device-name \)*//g')"
+          echo devices-- $DEVICES
           local DEVICES=$(echo $DEVICES)
         
           echo "GCEExport: set auto-delete for disks '$DEVICES' with instance '$NAME'"
-          IFS=" "
-          set -A DEVICE_ARR "$DEVICES"
-          for DEVICE in "${DEVICE_ARR[@]}"
-          do
-          :
-            gcloud --quiet compute instances set-disk-auto-delete $NAME --device-name=$DEVICE --zone=$ZONE
-          done
+          local IFS=" "
+          local DEVICE_ARR="aa"
+          #for DEVICE in "${DEVICE_ARR[@]}"
+          #do
+          #:
+          #  gcloud --quiet compute instances set-disk-auto-delete $NAME --device-name=$DEVICE --zone=$ZONE
+          #done
         
           echo "GCEExport: delete instance"
           gcloud --quiet compute instances delete $NAME --zone=$ZONE
