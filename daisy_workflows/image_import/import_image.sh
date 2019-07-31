@@ -24,8 +24,12 @@ delayed_cleanup() {
   # triggered from here. This is just the plan B to avoid left artifacts when workflow failed to
   # trigger its auto cleanup.
   local TIMEOUT="$(curl -f -H Metadata-Flavor:Google ${URL}/attributes/timeout)"
+  if [[ $? -ne 0 ]]; then
+    echo "GCEExport: Failed to get timeout attribute, stopping cleanup preparation."
+    return
+  fi
   sleep $TIMEOUT
-  #sleep 600
+  sleep 600
 
   echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
 
