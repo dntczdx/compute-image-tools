@@ -29,7 +29,7 @@ delayed_cleanup() {
     return
   fi
   sleep $TIMEOUT
-  sleep 600
+  #sleep 600
 
   echo "GCEExport: You shouldn't see this output since it's executed after timeout: delayed cleaning up..."
 
