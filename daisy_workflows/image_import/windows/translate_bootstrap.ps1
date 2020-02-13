@@ -59,7 +59,7 @@ function Get-MetadataValue {
 
 function Setup-ScriptRunner {
   $metadata_scripts = "${script:os_drive}\Program Files\Google\Compute Engine\metadata_scripts"
-  New-Item "${metadata_scripts}\"  -Force -ItemType Directory | Out-Null
+  New-Item "${metadata_scripts}\" -Force -ItemType Directory | Out-Null
   Copy-Item "${script:components_dir}\run_startup_scripts.cmd" "${metadata_scripts}\run_startup_scripts.cmd" -Verbose
   # This file must be unicode with no trailing new line and exactly match the source.
   (Get-Content "${script:components_dir}\GCEStartup" | Out-String).TrimEnd() | Out-File -Encoding Unicode -NoNewline "${script:os_drive}\Windows\System32\Tasks\GCEStartup"
@@ -113,6 +113,24 @@ function Copy-32bitPackages {
   $goofiles_dir = "${script:os_drive}\ProgramData\GooGet\components\"
   New-Item -Path $goofiles_dir -Force -Type Directory
   Copy-Item "${script:components_dir}\*.goo" "${script:os_drive}\ProgramData\GooGet\components\" -Force -Verbose -Recurse
+}
+
+# Detect whether the 2nd disk is GPT partitioned in order to determine whether it's a UEFI boot disk.
+function Detect-UEFI {
+  $partition_style = Get-Disk 1 | Select-Object -Expand PartitionStyle
+  if ($partition_style -eq 'MBR') {
+    Write-Output 'MBR partition detected.'
+    return $false
+  }
+
+  Write-Output "TranslateBootstrap: <serial-output key:'is-uefi-compatible' value:'true'>"
+  if ($partition_style -eq 'GPT') {
+    Write-Output 'GPT partition detected.'
+    return $true
+  }
+
+  Write-Output "TranslateBootstrap: partition style $partition_style detected. It is neither MBR nor GPT. Treat it as UEFI-compatible."
+  return $true
 }
 
 try {
@@ -194,12 +212,11 @@ try {
   else {
     Copy-32bitPackages
   }
-  if ($partition_style -eq "MBR") {
-    Write-Output 'MBR partition detected. Resetting bootloader.'
+
+  $is_uefi_compatible = Detect-UEFI
+  if (!$is_uefi_compatible) {
+    Write-Output 'Resetting bootloader.'
     Run-Command bcdboot "${script:os_drive}\Windows" /s $bcd_drive
-  }
-  else {
-    Write-Output 'GPT partition detected.'
   }
 
   # Turn off startup animation which breaks headless installation.

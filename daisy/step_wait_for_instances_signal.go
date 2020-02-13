@@ -177,10 +177,7 @@ func waitForSerialOutput(s *Step, project, zone, name string, so *SerialOutput, 
 
 func extractOutputValue(w *Workflow, s string) {
 	if matches := serialOutputValueRegex.FindStringSubmatch(s); matches != nil && len(matches) == 3 {
-		for w.parent != nil {
-			w = w.parent
-		}
-		w.AddSerialConsoleOutputValue(matches[1], matches[2])
+		w.Root().AddSerialConsoleOutputValue(matches[1], matches[2])
 	}
 }
 

@@ -68,6 +68,8 @@ type Step struct {
 	UpdateInstancesMetadata *UpdateInstancesMetadata `json:",omitempty"`
 	// Used for unit tests.
 	testType stepImpl
+	// Used for running extra logic before "run" func
+	PreRunHook func(ctx context.Context, s *Step) DError
 }
 
 // NewStep creates a Step with given name and timeout with the specified workflow.
@@ -280,6 +282,10 @@ func (s *Step) recordStepTime(startTime time.Time) {
 func (s *Step) run(ctx context.Context) DError {
 	startTime := time.Now()
 	defer s.recordStepTime(startTime)
+
+	if s.PreRunHook != nil {
+		s.PreRunHook(ctx, s)
+	}
 	impl, err := s.stepImpl()
 	if err != nil {
 		return s.wrapRunError(err)

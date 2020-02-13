@@ -230,12 +230,30 @@ func runImport(ctx context.Context, varMap map[string]string, importWorkflowPath
 			}}
 		rl.LabelResources(w)
 		daisyutils.UpdateAllInstanceNoExternalIP(w, noExternalIP)
+
 		if uefiCompatible {
+			// Enforce UEFI_COMPATIBLE tag
 			daisyutils.UpdateToUEFICompatible(w)
+		} else {
+			// Update UEFI_COMPATIBLE tag
+			setupUEFIUpdateHook(workflow)
 		}
 	}
 
 	return workflow, workflow.RunWithModifiers(ctx, preValidateWorkflowModifier, postValidateWorkflowModifier)
+}
+
+func setupUEFIUpdateHook(workflow *daisy.Workflow) {
+	workflow.IterateWorkflowSteps(func(s *daisy.Step) {
+		if s.CreateImages != nil {
+			s.PreRunHook = func(ctx context.Context, s *daisy.Step) daisy.DError {
+				if workflow.Root().GetSerialConsoleOutputValue("is-uefi-compatible") == "true" {
+					daisyutils.UpdateCreateImagesToUEFICompatible(s)
+				}
+				return nil
+			}
+		}
+	})
 }
 
 // Run runs import workflow.

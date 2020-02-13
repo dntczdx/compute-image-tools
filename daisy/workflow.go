@@ -163,6 +163,14 @@ type Workflow struct {
 	forceCleanup bool
 }
 
+//Root returns root workflow of own.
+func (w *Workflow) Root() *Workflow {
+	for w.parent != nil {
+		w = w.parent
+	}
+	return w
+}
+
 //DisableCloudLogging disables logging to Cloud Logging for this workflow.
 func (w *Workflow) DisableCloudLogging() {
 	w.cloudLoggingDisabled = true

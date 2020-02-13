@@ -125,36 +125,48 @@ func UpdateAllInstanceNoExternalIP(workflow *daisy.Workflow, noExternalIP bool) 
 }
 
 // UpdateToUEFICompatible marks workflow resources (disks and images) to be UEFI
-// compatible by adding "UEFI_COMPATIBLE" to GuestOSFeatures. Debian 9 workers
-// are excluded until UEFI becomes the default boot method.
+// compatible by adding "UEFI_COMPATIBLE" to GuestOSFeatures.
 func UpdateToUEFICompatible(workflow *daisy.Workflow) {
 	workflow.IterateWorkflowSteps(func(step *daisy.Step) {
-		if step.CreateDisks != nil {
-			for _, disk := range *step.CreateDisks {
-				// for the time being, don't run Debian 9 worker in UEFI mode
-				if strings.Contains(disk.SourceImage, "projects/compute-image-tools/global/images/family/debian-9-worker") {
-					continue
-				}
-				// also, don't run Windows bootstrap worker in UEFI mode
-				if strings.Contains(disk.SourceImage, "projects/windows-cloud/global/images/family/windows-2019-core") && strings.Contains(disk.Name, "disk-bootstrap") {
-					continue
-				}
-
-				disk.Disk.GuestOsFeatures = daisy.CombineGuestOSFeatures(disk.Disk.GuestOsFeatures, "UEFI_COMPATIBLE")
-			}
-		}
-		if step.CreateImages != nil {
-			for _, image := range step.CreateImages.Images {
-				image.GuestOsFeatures = stringutils.CombineStringSlices(image.GuestOsFeatures, "UEFI_COMPATIBLE")
-				image.Image.GuestOsFeatures = daisy.CombineGuestOSFeatures(image.Image.GuestOsFeatures, "UEFI_COMPATIBLE")
-
-			}
-			for _, image := range step.CreateImages.ImagesBeta {
-				image.GuestOsFeatures = stringutils.CombineStringSlices(image.GuestOsFeatures, "UEFI_COMPATIBLE")
-				image.Image.GuestOsFeatures = daisy.CombineGuestOSFeaturesBeta(image.Image.GuestOsFeatures, "UEFI_COMPATIBLE")
-			}
-		}
+		UpdateCreateDisksToUEFICompatible(step)
+		UpdateCreateImagesToUEFICompatible(step)
 	})
+}
+
+// UpdateCreateDisksToUEFICompatible marks CreateDisks step to be UEFI
+// compatible by adding "UEFI_COMPATIBLE" to GuestOSFeatures. Debian 9 workers
+// are excluded until UEFI becomes the default boot method.
+func UpdateCreateDisksToUEFICompatible(step *daisy.Step) {
+	if step.CreateDisks != nil {
+		for _, disk := range *step.CreateDisks {
+			// for the time being, don't run Debian 9 worker in UEFI mode
+			if strings.Contains(disk.SourceImage, "projects/compute-image-tools/global/images/family/debian-9-worker") {
+				continue
+			}
+			// also, don't run Windows bootstrap worker in UEFI mode
+			if strings.Contains(disk.SourceImage, "projects/windows-cloud/global/images/family/windows-2019-core") && strings.Contains(disk.Name, "disk-bootstrap") {
+				continue
+			}
+
+			disk.Disk.GuestOsFeatures = daisy.CombineGuestOSFeatures(disk.Disk.GuestOsFeatures, "UEFI_COMPATIBLE")
+		}
+	}
+}
+
+// UpdateCreateImagesToUEFICompatible marks CreateImages step to be UEFI
+// compatible by adding "UEFI_COMPATIBLE" to GuestOSFeatures.
+func UpdateCreateImagesToUEFICompatible(step *daisy.Step) {
+	if step.CreateImages != nil {
+		for _, image := range step.CreateImages.Images {
+			image.GuestOsFeatures = stringutils.CombineStringSlices(image.GuestOsFeatures, "UEFI_COMPATIBLE")
+			image.Image.GuestOsFeatures = daisy.CombineGuestOSFeatures(image.Image.GuestOsFeatures, "UEFI_COMPATIBLE")
+
+		}
+		for _, image := range step.CreateImages.ImagesBeta {
+			image.GuestOsFeatures = stringutils.CombineStringSlices(image.GuestOsFeatures, "UEFI_COMPATIBLE")
+			image.Image.GuestOsFeatures = daisy.CombineGuestOSFeaturesBeta(image.Image.GuestOsFeatures, "UEFI_COMPATIBLE")
+		}
+	}
 }
 
 // RemovePrivacyLogInfo removes privacy log information.
