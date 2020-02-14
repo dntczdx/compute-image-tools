@@ -86,10 +86,15 @@ func NewStepDefaultTimeout(name string, w *Workflow) *Step {
 	return NewStep(name, w, 0)
 }
 
-func (s *Step) SetPreRunHook (hook func(s *Step) DError) {
+// SetPreRunHook sets the preRunHook for running extra logic before "run" func
+func (s *Step) SetPreRunHook(hook func(s *Step) DError) {
 	s.preRunHook = hook
 }
 
+// GetPreRunHook gets the preRunHook
+func (s *Step) GetPreRunHook() func(*Step) DError {
+	return s.preRunHook
+}
 
 func (s *Step) stepImpl() (stepImpl, DError) {
 	var result stepImpl

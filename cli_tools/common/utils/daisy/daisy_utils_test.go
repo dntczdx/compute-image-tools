@@ -190,10 +190,10 @@ func TestSetupUEFIUpdateHook(t *testing.T) {
 	s := w.Steps["cimg"]
 
 	SetupUEFIUpdateHook(w)
-	assert.NotNil(t, s.preRunHook)
+	assert.NotNil(t, s.GetPreRunHook())
 
 	w.AddSerialConsoleOutputValue("is-uefi-compatible", "true")
-	s.preRunHook(s)
+	s.GetPreRunHook()(s)
 
 	assert.Equal(t, 1, len(s.CreateImages.Images[0].GuestOsFeatures))
 	assert.Equal(t, "UEFI_COMPATIBLE", s.CreateImages.Images[0].GuestOsFeatures[0])
