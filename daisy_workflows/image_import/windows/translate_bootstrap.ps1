@@ -119,24 +119,36 @@ function Copy-32bitPackages {
 function Detect-UEFI {
   $partition_style = Get-Disk 1 | Select-Object -Expand PartitionStyle
   if ($partition_style -eq 'MBR') {
-    Write-Output 'MBR partition detected.'
+    Write-Host 'MBR partition detected.'
     return $false
   }
 
-  Write-Output "TranslateBootstrap: <serial-output key:'is-uefi-compatible' value:'true'>"
+  Write-Host "TranslateBootstrap: <serial-output key:'is-uefi-compatible' value:'true'>"
   if ($partition_style -eq 'GPT') {
-    Write-Output 'GPT partition detected.'
+    Write-Host 'GPT partition detected.'
     Detect-UEFI-File
     return $true
   }
 
-  Write-Output "TranslateBootstrap: partition style $partition_style detected. It is neither MBR nor GPT. Treat it as UEFI-compatible."
+  Write-Host "TranslateBootstrap: partition style $partition_style detected. It is neither MBR nor GPT. This image may not boot successfully. Treat it as UEFI-compatible to have a try."
   return $true
 }
 
 # Detect UEFI file to get more evidence whether it can boot successfully
 function Detect-UEFI-File {
+  $has_uefi_boot_file = $false
 
+   # Drive letter has been assigned. Just iterate.
+  Get-Disk 1 | Get-Partition | ForEach-Object {
+    if (Test-Path "$($_.DriveLetter):\EFI\Boot\bootx64.efi") {
+      Write-Host "UEFI boot file detected."
+      $has_uefi_boot_file = $true
+    }
+  }
+
+  if (!$has_uefi_boot_file) {
+    Write-Host "TranslateBootstrap: UEFI boot file EFI\Boot\bootx64.efi is not found in any partition. This image may not boot successfully."
+  }
 }
 
 try {
