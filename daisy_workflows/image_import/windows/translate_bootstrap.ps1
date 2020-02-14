@@ -126,11 +126,17 @@ function Detect-UEFI {
   Write-Output "TranslateBootstrap: <serial-output key:'is-uefi-compatible' value:'true'>"
   if ($partition_style -eq 'GPT') {
     Write-Output 'GPT partition detected.'
+    Detect-UEFI-File
     return $true
   }
 
   Write-Output "TranslateBootstrap: partition style $partition_style detected. It is neither MBR nor GPT. Treat it as UEFI-compatible."
   return $true
+}
+
+# Detect UEFI file to get more evidence whether it can boot successfully
+function Detect-UEFI-File {
+
 }
 
 try {
