@@ -124,6 +124,21 @@ func UpdateAllInstanceNoExternalIP(workflow *daisy.Workflow, noExternalIP bool) 
 	})
 }
 
+// SetupUEFIUpdateHook setup pre-run hook for each create-images steps to
+// update "UEFI_COMPATIBLE" tag based on context
+func SetupUEFIUpdateHook(workflow *daisy.Workflow) {
+	workflow.IterateWorkflowSteps(func(s *daisy.Step) {
+		if s.CreateImages != nil {
+			s.SetPreRunHook(func(s *daisy.Step) daisy.DError {
+				if workflow.Root().GetSerialConsoleOutputValue("is-uefi-compatible") == "true" {
+					UpdateCreateImagesToUEFICompatible(s)
+				}
+				return nil
+			})
+		}
+	})
+}
+
 // UpdateToUEFICompatible marks workflow resources (disks and images) to be UEFI
 // compatible by adding "UEFI_COMPATIBLE" to GuestOSFeatures.
 func UpdateToUEFICompatible(workflow *daisy.Workflow) {

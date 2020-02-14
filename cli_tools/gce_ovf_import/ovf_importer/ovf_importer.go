@@ -363,8 +363,13 @@ func (oi *OVFImporter) modifyWorkflowPostValidate(w *daisy.Workflow) {
 	rl.LabelResources(w)
 	daisyutils.UpdateAllInstanceNoExternalIP(w, oi.params.NoExternalIP)
 	if oi.params.UefiCompatible {
+		// Enforce UEFI_COMPATIBLE tag
 		daisyutils.UpdateToUEFICompatible(w)
+	} else {
+		// Update UEFI_COMPATIBLE tag
+		daisyutils.SetupUEFIUpdateHook(w)
 	}
+
 }
 
 func (oi *OVFImporter) getMachineType(

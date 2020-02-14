@@ -69,7 +69,7 @@ type Step struct {
 	// Used for unit tests.
 	testType stepImpl
 	// Used for running extra logic before "run" func
-	PreRunHook func(ctx context.Context, s *Step) DError
+	preRunHook func(s *Step) DError
 }
 
 // NewStep creates a Step with given name and timeout with the specified workflow.
@@ -85,6 +85,11 @@ func NewStep(name string, w *Workflow, timeout time.Duration) *Step {
 func NewStepDefaultTimeout(name string, w *Workflow) *Step {
 	return NewStep(name, w, 0)
 }
+
+func (s *Step) SetPreRunHook (hook func(s *Step) DError) {
+	s.preRunHook = hook
+}
+
 
 func (s *Step) stepImpl() (stepImpl, DError) {
 	var result stepImpl
@@ -283,8 +288,8 @@ func (s *Step) run(ctx context.Context) DError {
 	startTime := time.Now()
 	defer s.recordStepTime(startTime)
 
-	if s.PreRunHook != nil {
-		s.PreRunHook(ctx, s)
+	if s.preRunHook != nil {
+		s.preRunHook(s)
 	}
 	impl, err := s.stepImpl()
 	if err != nil {

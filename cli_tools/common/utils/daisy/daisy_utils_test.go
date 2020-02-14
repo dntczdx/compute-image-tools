@@ -185,6 +185,25 @@ func TestUpdateToUEFICompatible(t *testing.T) {
 	assert.Equal(t, "UEFI_COMPATIBLE", (*w.Steps["cimg"].CreateImages).ImagesBeta[0].Image.GuestOsFeatures[0].Type)
 }
 
+func TestSetupUEFIUpdateHook(t *testing.T) {
+	w := createWorkflowWithCreateDiskImageAndIncludeWorkflow()
+	s := w.Steps["cimg"]
+
+	SetupUEFIUpdateHook(w)
+	assert.NotNil(t, s.preRunHook)
+
+	w.AddSerialConsoleOutputValue("is-uefi-compatible", "true")
+	s.preRunHook(s)
+
+	assert.Equal(t, 1, len(s.CreateImages.Images[0].GuestOsFeatures))
+	assert.Equal(t, "UEFI_COMPATIBLE", s.CreateImages.Images[0].GuestOsFeatures[0])
+	assert.Equal(t, "UEFI_COMPATIBLE", s.CreateImages.Images[0].Image.GuestOsFeatures[0].Type)
+
+	assert.Equal(t, 1, len(s.CreateImages.ImagesBeta[0].GuestOsFeatures))
+	assert.Equal(t, "UEFI_COMPATIBLE", s.CreateImages.ImagesBeta[0].GuestOsFeatures[0])
+	assert.Equal(t, "UEFI_COMPATIBLE", s.CreateImages.ImagesBeta[0].Image.GuestOsFeatures[0].Type)
+}
+
 func createWorkflowWithCreateInstanceNetworkAccessConfig() *daisy.Workflow {
 	w := daisy.New()
 	w.Steps = map[string]*daisy.Step{
