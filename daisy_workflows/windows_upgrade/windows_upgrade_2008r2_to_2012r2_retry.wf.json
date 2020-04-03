@@ -1,0 +1,68 @@
+{
+  "Name": "windows-upgrade-2008r2-to-2012r2",
+  "DefaultTimeout": "90m",
+  "Vars": {
+    "instance": {
+      "Required": true,
+      "Description": "instance uri"
+    },
+    "project": {
+      "Required": true,
+      "Description": "project of the instance"
+    },
+    "zone": {
+      "Required": true,
+      "Description": "zone of the instance"
+    },
+    "original_startup_script_url": {
+      "Value": "",
+      "Description": "original startup script url"
+    },
+    "install_media": {
+      "Required": true,
+      "Description": "install media disk name"
+    }
+  },
+  "Steps": {
+    "wait-for-boot": {
+      "Timeout": "15m",
+      "WaitForInstancesSignal": [
+        {
+          "Name": "${instance}",
+          "SerialOutput": {
+            "Port": 1,
+            "SuccessMatch": "GCEMetadataScripts: Beginning upgrade startup script."
+          }
+        }
+      ]
+    },
+    "wait-for-upgrade": {
+      "WaitForInstancesSignal": [
+        {
+          "Name": "${instance}",
+          "SerialOutput": {
+            "Port": 1,
+            "SuccessMatch": "windows_upgrade_current_version=6.3",
+            "FailureMatch": "UpgradeFailed:",
+            "StatusMatch": "GCEMetadataScripts:"
+          }
+        }
+      ]
+    },
+    "cleanup-temp-resources": {
+      "IncludeWorkflow": {
+        "Path": "cleanup.wf.json",
+        "Vars": {
+          "instance": "${instance}",
+          "project": "${project}",
+          "zone": "${zone}",
+          "original_startup_script_url": "${original_startup_script_url}",
+          "install_media": "${install_media}"
+        }
+      }
+    }
+  },
+  "Dependencies": {
+    "cleanup-temp-resources": ["wait-for-upgrade"]
+  }
+}

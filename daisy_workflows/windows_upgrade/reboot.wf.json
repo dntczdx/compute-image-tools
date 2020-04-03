@@ -1,0 +1,25 @@
+{
+  "Name": "reboot",
+  "DefaultTimeout": "15m",
+  "Vars": {
+    "instance": {
+      "Required": true,
+      "Description": "instance uri"
+    }
+  },
+  "Steps": {
+    "stop-instance": {
+      "StopInstances": {
+        "Instances": ["${instance}"]
+      }
+    },
+    "start-instance": {
+      "StartInstances": {
+        "Instances": ["${instance}"]
+      }
+    }
+  },
+  "Dependencies": {
+    "start-instance": ["stop-instance"]
+  }
+}
