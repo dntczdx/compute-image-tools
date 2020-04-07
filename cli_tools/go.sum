@@ -39,6 +39,7 @@ dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7
 github.com/BurntSushi/toml v0.3.1 h1:WXkYYl6Yr3qBf1K79EBnL4mak0OimBfB0XUf9Vl28OQ=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
+github.com/GoogleCloudPlatform/compute-image-tools v0.0.0-20200407012029-3a185c858fdd h1:Hpk9vPEj9tgSiBKcpzZ1VzCJYfJ2C6EtJOi5+khKNwI=
 github.com/GoogleCloudPlatform/compute-image-tools/cli_tools v0.0.0-20200114193945-760dc9647411/go.mod h1:928Ttg3SXjfF1mOI37hjnFUahdU4R234SpDcgcBO0I8=
 github.com/GoogleCloudPlatform/compute-image-tools/cli_tools v0.0.0-20200406182414-bf9021434372/go.mod h1:zkxkF+fdCQyagLcSSWbQeDcvShTFro3HbulNmXzbBJg=
 github.com/GoogleCloudPlatform/compute-image-tools/daisy v0.0.0-20200111002017-35d3756114c9/go.mod h1:F+pk+WYiOJPq6m9oQkFZ3Vyw2l4nYJUgDyl4UW58+Q4=
