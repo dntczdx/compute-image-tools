@@ -116,7 +116,6 @@ type Workflow struct {
 
 	// Working fields.
 	autovars              map[string]string
-	inputvars             map[string]string
 	workflowDir           string
 	parent                *Workflow
 	bucket                string
