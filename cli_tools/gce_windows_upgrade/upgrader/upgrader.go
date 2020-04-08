@@ -48,7 +48,7 @@ const (
 	versionWindows2012r2 = "windows-2012r2"
 
 	upgradeIntroductionTemplate = "The following resources will be created/touched during the upgrade. " +
-		"Please record them in order for cleanup or manual rollback.\n" +
+		"Please record their name in order for cleanup or manual rollback.\n" +
 		"All resources are in project '%v', zone '%v'.\n" +
 		"1. Instance: %v\n" +
 		"2. Disk for install media: %v\n" +
@@ -60,17 +60,25 @@ const (
 		"6. Machine image: %v\n" +
 		"7. Original startup script url '%v': %v\n" +
 		"\n" +
-		"When upgrading succeeded but cleanup failed, please manually cleanup by:\n" +
-		"1. \n\n" +
-		"" +
-		"When upgrading failed but you didn't enable auto-rollback, or auto-rollback failed, or " +
-		"upgrading succeeded but you want to rollback to original state for any reason, " +
-		"please manually rollback by:\n" +
-		"1. \n" +
+		"When upgrading succeeded but cleanup failed, please manually cleanup by following steps:\n" +
+		"1. Delete 'windows-startup-script-url' from the instance's metadata if there isn't an original value. " +
+		"If there is an original value, restore it. The original value is backed up as metadata 'windows-startup-script-url-backup'.\n" +
+		"2. Detach the install media disk from the instance and delete it.\n" +
 		"\n" +
-		"Once you verified the upgrading succeeded and you will never rollback anymore, you can:\n" +
-		"1. Delete original OS disk.\n" +
-		"2. Delete machine image."
+		"When upgrading failed but you didn't enable auto-rollback, or auto-rollback failed, or " +
+		"upgrading succeeded but you still need to rollback for any reason, " +
+		"please manually rollback by following steps:\n" +
+		"1. Detach the new OS disk from the instance and delete it.\n" +
+		"2. Attach the old OS disk as boot disk.\n" +
+		"3. Detach the install media disk from the instance and delete it.\n" +
+		"4. Delete 'windows-startup-script-url' from the instance's metadata if there isn't an original value. " +
+		"If there is an original value, restore it. The original value is backed up as metadata 'windows-startup-script-url-backup'.\n" +
+		"\n" +
+		"Once you verified the upgrading succeeded and decided to never rollback, you can:\n" +
+		"1. Delete the original OS disk.\n" +
+		"2. Delete the machine image.\n" +
+		"3. Delete the snapshot.\n" +
+		"\n"
 )
 
 var (
