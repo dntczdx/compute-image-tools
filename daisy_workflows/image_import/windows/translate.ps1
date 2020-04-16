@@ -265,6 +265,14 @@ try {
   $script:is_byol = Get-MetadataValue -key 'is_byol'
   $script:is_x86 = Get-MetadataValue -key 'is_x86'
 
+  Write-Output 'Translate: Removing Azure agent.'
+  Run-Command sc stop "WindowsAzureGuestAgent"
+  Run-Command sc delete "WindowsAzureGuestAgent"
+  Run-Command sc stop "WindowsAzureNetAgentSvc"
+  Run-Command sc delete "WindowsAzureNetAgentSvc"
+  Run-Command sc stop "WindowsAzureTelemetryService"
+  Run-Command sc delete "WindowsAzureTelemetryService"
+
   Remove-VMWareTools
   Change-InstanceProperties
   Configure-Network
