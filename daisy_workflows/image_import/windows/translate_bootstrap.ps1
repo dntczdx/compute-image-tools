@@ -134,8 +134,21 @@ try {
     if (Test-Path "$($_.DriveLetter):\Windows") {
       $script:os_drive = "$($_.DriveLetter):"
     }
-    elseif (Test-Path "$($_.DriveLetter):\Boot\BCD") {
-      $bcd_drive = "$($_.DriveLetter):"
+    else {
+      if ($partition_style -eq "MBR")
+      {
+        if (Test-Path "$($_.DriveLetter):\Boot\BCD")
+        {
+          $bcd_drive = "$( $_.DriveLetter ):"
+        }
+      }
+      if ($partition_style -ne "MBR")
+      {
+        if (Test-Path "$($_.DriveLetter):\EFI\Boot")
+        {
+          $bcd_drive = "$( $_.DriveLetter ):"
+        }
+      }
     }
   }
   if (!$bcd_drive) {
@@ -198,11 +211,12 @@ try {
   if ($partition_style -eq "MBR") {
     Write-Output 'MBR partition detected. Resetting bootloader.'
     Run-Command bcdboot "${script:os_drive}\Windows" /s $bcd_drive
+    Run-Command bcdedit /store "${bcd_drive}\boot\bcd" /emssettings BIOS
   }
   else {
     Write-Output 'GPT partition detected.'
+    Run-Command bcdedit /store "${bcd_drive}\efi\microsoft\boot\bcd" /emssettings BIOS
   }
-  Run-Command bcdedit /store "${bcd_drive}\boot\bcd" /emssettings BIOS
 
   # Turn off startup animation which breaks headless installation.
   # See http://support.microsoft.com/kb/2955372/en-us

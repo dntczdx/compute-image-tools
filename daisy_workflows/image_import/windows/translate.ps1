@@ -266,12 +266,12 @@ try {
   $script:is_x86 = Get-MetadataValue -key 'is_x86'
 
   Write-Output 'Translate: Removing Azure agent.'
-  Run-Command sc stop "WindowsAzureGuestAgent"
-  Run-Command sc delete "WindowsAzureGuestAgent"
-  Run-Command sc stop "WindowsAzureNetAgentSvc"
-  Run-Command sc delete "WindowsAzureNetAgentSvc"
-  Run-Command sc stop "WindowsAzureTelemetryService"
-  Run-Command sc delete "WindowsAzureTelemetryService"
+  Run-Command sc.exe stop WindowsAzureGuestAgent
+  Run-Command sc.exe delete WindowsAzureGuestAgent
+  Run-Command sc.exe stop WindowsAzureNetAgentSvc
+  Run-Command sc.exe delete WindowsAzureNetAgentSvc
+  Run-Command sc.exe stop WindowsAzureTelemetryService
+  Run-Command sc.exe delete WindowsAzureTelemetryService
 
   Remove-VMWareTools
   Change-InstanceProperties
