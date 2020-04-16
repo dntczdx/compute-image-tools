@@ -202,7 +202,7 @@ try {
   else {
     Write-Output 'GPT partition detected.'
   }
-  Run-Command bcdedit /store "${bcd_drive}\boot\bcd“ /emssettings BIOS
+  Run-Command bcdedit /store "${bcd_drive}\boot\bcd" /emssettings BIOS
 
   # Turn off startup animation which breaks headless installation.
   # See http://support.microsoft.com/kb/2955372/en-us
