@@ -15,7 +15,10 @@
 package daisy
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"reflect"
 	"regexp"
 	"strings"
@@ -192,4 +195,19 @@ func PostProcessDErrorForNetworkFlag(action string, err error, network string, w
 				" VPC networks, see https://cloud.google.com/vpc.", action)
 		}
 	}
+}
+
+// RunWorkflowWithCancelSignal runs Daisy workflow with accepting Ctrl-C signal
+func RunWorkflowWithCancelSignal(ctx context.Context, w *daisy.Workflow) error {
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func(w *daisy.Workflow) {
+		select {
+		case <-c:
+			w.LogWorkflowInfo("\nCtrl-C caught, sending cancel signal to %q...\n", w.Name)
+			close(w.Cancel)
+		case <-w.Cancel:
+		}
+	}(w)
+	return w.Run(ctx)
 }
