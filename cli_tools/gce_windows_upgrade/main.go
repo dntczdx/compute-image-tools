@@ -26,14 +26,9 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 )
 
-// flag keys
-const (
-	ClientIDFlagKey = "client_id"
-)
-
 var (
 	// project/zone/network/subnet/labels are not required when the upgrade has targetOS happen in place.
-	clientID               = flag.String(ClientIDFlagKey, "", "Identifies the client of the importer, e.g. `gcloud` or `pantheon`.")
+	clientID               = flag.String(upgrader.ClientIDFlagKey, "", "Identifies the client of the importer, e.g. `gcloud` or `pantheon`.")
 	instance               = flag.String("instance", "", "Instance targetOS upgrade, in the form of 'projects/<project>/zones/<zone>/instances/<instance>'.")
 	skipMachineImageBackup = flag.Bool("skip-machine-image-backup", false, "Skip backup for the instance. Don't use it unless you have already backed up manually.")
 	autoRollback           = flag.Bool("auto-rollback", false, "Rollback automatically when upgrading failed. Don't use it if you want targetOS debug why upgrading failed.")
@@ -52,8 +47,25 @@ var (
 
 func upgradeEntry() (*daisy.Workflow, error) {
 	currentExecutablePath := string(os.Args[0])
-	return upgrader.Run(*clientID, *instance, *skipMachineImageBackup, *autoRollback, *sourceOS, *targetOS, project, *timeout, *scratchBucketGcsPath, *oauth, *ce, *gcsLogsDisabled,
-		*cloudLogsDisabled, *stdoutLogsDisabled, currentExecutablePath)
+	upgradeParams := &upgrader.UpgradeParams{
+		ClientID:               strings.TrimSpace(*clientID),
+		InstanceURI:            strings.TrimSpace(*instance),
+		SkipMachineImageBackup: *skipMachineImageBackup,
+		AutoRollback:           *autoRollback,
+		SourceOS:               strings.TrimSpace(*sourceOS),
+		TargetOS:               strings.TrimSpace(*targetOS),
+		ProjectPtr:             project,
+		Timeout:                strings.TrimSpace(*timeout),
+		ScratchBucketGcsPath:   strings.TrimSpace(*scratchBucketGcsPath),
+		Oauth:                  strings.TrimSpace(*oauth),
+		Ce:                     strings.TrimSpace(*ce),
+		GcsLogsDisabled:        *gcsLogsDisabled,
+		CloudLogsDisabled:      *cloudLogsDisabled,
+		StdoutLogsDisabled:     *stdoutLogsDisabled,
+		CurrentExecutablePath:  currentExecutablePath,
+	}
+
+	return upgrader.Run(upgradeParams)
 }
 
 func main() {

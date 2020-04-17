@@ -123,22 +123,3 @@ func buildDaisyVarsForReboot(instance string) map[string]string {
 
 	return varMap
 }
-
-func buildDaisyVarsForRollback(project, zone, instance, installMedia, osDiskDeviceName, oldOSDisk, newOSDiskName string, osDiskAutoDelete bool) map[string]string {
-	varMap := map[string]string{}
-
-	varMap["project"] = project
-	varMap["zone"] = zone
-	varMap["instance"] = instance
-	varMap["install_media"] = installMedia
-	varMap["os_disk_device_name"] = osDiskDeviceName
-	varMap["old_os_disk"] = oldOSDisk
-	varMap["new_os_disk_name"] = newOSDiskName
-	if osDiskAutoDelete {
-		varMap["os_disk_auto_delete"] = "true"
-	} else {
-		varMap["os_disk_auto_delete"] = "false"
-	}
-
-	return varMap
-}

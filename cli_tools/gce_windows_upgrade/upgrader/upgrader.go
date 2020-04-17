@@ -24,6 +24,7 @@ import (
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/validation"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
@@ -31,12 +32,16 @@ import (
 	"google.golang.org/api/option"
 )
 
+// Parameter key shared with external packages
+const (
+	ClientIDFlagKey = "client_id"
+)
+
 const (
 	logPrefix                      = "[windows-upgrade]"
 	rebootWorkflowPath             = "daisy_workflows/windows_upgrade/reboot.wf.json"
 	upgradePreparationWorkflowPath = "daisy_workflows/windows_upgrade/windows_upgrade_preparation.wf.json"
 	cleanupWorkflowPath            = "daisy_workflows/windows_upgrade/cleanup.wf.json"
-	rollbackWorkflowPath           = "daisy_workflows/windows_upgrade/rollback.wf.json"
 
 	rfc1035       = "[a-z]([-a-z0-9]*[a-z0-9])?"
 	projectRgxStr = "[a-z]([-.:a-z0-9]*[a-z0-9])?"
@@ -110,35 +115,49 @@ type validatedParams struct {
 	osDiskAutoDelete bool
 }
 
-// Run runs upgrade workflow.
-func Run(clientID string, instance string, skipMachineImageBackup bool, autoRollback bool, sourceOS string,
-	targetOS string, project *string, timeout string, scratchBucketGcsPath string, oauth string,
-	ce string, gcsLogsDisabled bool, cloudLogsDisabled bool, stdoutLogsDisabled bool,
-	currentExecutablePath string) (*daisy.Workflow, error) {
+// UpgradeParams contains user input params and validated (transformed) params
+type UpgradeParams struct {
+	ClientID               string
+	InstanceURI            string
+	SkipMachineImageBackup bool
+	AutoRollback           bool
+	SourceOS               string
+	TargetOS               string
+	ProjectPtr             *string
+	Timeout                string
+	ScratchBucketGcsPath   string
+	Oauth                  string
+	Ce                     string
+	GcsLogsDisabled        bool
+	CloudLogsDisabled      bool
+	StdoutLogsDisabled     bool
+	CurrentExecutablePath  string
 
+	validatedParams
+}
+
+// Run runs upgrade workflow.
+func Run(upgradeParams *UpgradeParams) (*daisy.Workflow, error) {
 	log.SetPrefix(logPrefix + " ")
+
+	if err := validation.ValidateStringFlagNotEmpty(upgradeParams.ClientID, ClientIDFlagKey); err != nil {
+		return nil, err
+	}
 
 	var err error
 	ctx := context.Background()
-	computeClient, err = daisyCompute.NewClient(ctx, option.WithCredentialsFile(oauth))
+	computeClient, err = daisyCompute.NewClient(ctx, option.WithCredentialsFile(upgradeParams.Oauth))
 	if err != nil {
 		return nil, daisy.Errf("Failed to create GCE client: %v", err)
 	}
 
-	instance = strings.TrimSpace(instance)
-	sourceOS = strings.TrimSpace(sourceOS)
-	targetOS = strings.TrimSpace(targetOS)
-	validatedParams, err := validateParams(instance, sourceOS, targetOS)
+	validatedParams, err := validateParams(upgradeParams.InstanceURI, upgradeParams.SourceOS, upgradeParams.TargetOS)
 	if err != nil {
 		return nil, err
 	}
-	*project = validatedParams.project
+	*upgradeParams.ProjectPtr = validatedParams.project
 
-	return runUpgradeWorkflow(ctx, currentExecutablePath, skipMachineImageBackup, autoRollback,
-		sourceOS, targetOS, instance, validatedParams.project, validatedParams.zone, validatedParams.instanceName,
-		validatedParams.osDisk, validatedParams.osDiskType, validatedParams.osDiskDeviceName,
-		validatedParams.osDiskAutoDelete, timeout, scratchBucketGcsPath, oauth, ce, gcsLogsDisabled, cloudLogsDisabled,
-		stdoutLogsDisabled)
+	return runUpgradeWorkflow(ctx, upgradeParams)
 }
 
 func validateParams(instancePath string, sourceOS string, targetOS string) (validatedParams, error) {
@@ -245,43 +264,36 @@ func validateLicense(inst *compute.Instance, sourceOS string) error {
 	return nil
 }
 
-func runUpgradeWorkflow(ctx context.Context, currentExecutablePath string,
-	skipMachineImageBackup bool, autoRollback bool, sourceOS string, targetOS string, instance string,
-	project string, zone string, instanceName string, oldOSDisk string, osDiskType string,
-	osDiskDeviceName string, osDiskAutoDelete bool, timeout string, scratchBucketGcsPath string, oauth string,
-	ce string, gcsLogsDisabled bool, cloudLogsDisabled bool, stdoutLogsDisabled bool) (*daisy.Workflow, error) {
-
+func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Workflow, error) {
 	var err error
-	workflowPath := path.ToWorkingDir(upgradeWorkflowPath[sourceOS], currentExecutablePath)
-	retryWorkflowPath := path.ToWorkingDir(retryUpgradeWorkflowPath[sourceOS], currentExecutablePath)
+	workflowPath := path.ToWorkingDir(upgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
+	retryWorkflowPath := path.ToWorkingDir(retryUpgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
 	suffix := path.RandString(8)
 	machineImageBackupName := fmt.Sprintf("backup-machine-image-%v", suffix)
 	osDiskSnapshotName := fmt.Sprintf("win-upgrade-os-disk-snapshot-%v", suffix)
 	newOSDiskName := fmt.Sprintf("windows-upgraded-os-disk-%v", suffix)
 	installMediaDiskName := fmt.Sprintf("windows-install-media-%v", suffix)
 
-	preparationVarMap := buildDaisyVarsForPreparation(project, zone, instance, machineImageBackupName,
-		osDiskSnapshotName, newOSDiskName, installMediaDiskName, upgradeScriptName[sourceOS],
-		sourceOS, oldOSDisk, osDiskType, osDiskDeviceName, osDiskAutoDelete)
-	upgradeVarMap := buildDaisyVarsForUpgrade(project, zone, instance, installMediaDiskName)
-	rebootVarMap := buildDaisyVarsForReboot(instance)
-	rollbackVarMap := buildDaisyVarsForRollback(project, zone, instance, installMediaDiskName, osDiskDeviceName, oldOSDisk, newOSDiskName, osDiskAutoDelete)
+	preparationVarMap := buildDaisyVarsForPreparation(params.project, params.zone, params.InstanceURI, machineImageBackupName,
+		osDiskSnapshotName, newOSDiskName, installMediaDiskName, upgradeScriptName[params.SourceOS],
+		params.SourceOS, params.osDisk, params.osDiskType, params.osDiskDeviceName, params.osDiskAutoDelete)
+	upgradeVarMap := buildDaisyVarsForUpgrade(params.project, params.zone, params.InstanceURI, installMediaDiskName)
+	rebootVarMap := buildDaisyVarsForReboot(params.InstanceURI)
 
 	// If upgrade failed, run cleanup/rollback before exiting.
 	defer func() {
 		if err == nil {
-			fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", instance, targetOS)
+			fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", params.InstanceURI, params.TargetOS)
 			fmt.Printf("\nPlease verify the functionality of the instance. If " +
 				"it has a problem and can't be fixed, please manually rollback following the guide.\n\n")
 			return
 		}
 
-		isNewOSDiskAttached := isNewOSDiskAttached(project, zone, instanceName, newOSDiskName)
-		if autoRollback {
+		isNewOSDiskAttached := isNewOSDiskAttached(params.project, params.zone, params.instanceName, newOSDiskName)
+		if params.AutoRollback {
 			if isNewOSDiskAttached {
-				fmt.Printf("\nFailed to finish upgrading. Rollback to original state from original OS disk '%v'...\n\n", oldOSDisk)
-				_, err := rollback(ctx, rollbackVarMap, project, zone, scratchBucketGcsPath, oauth, timeout, ce,
-					gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled)
+				fmt.Printf("\nFailed to finish upgrading. Rollback to original state from original OS disk '%v'...\n\n", params.osDisk)
+				_, err := rollback(ctx, params, installMediaDiskName, newOSDiskName)
 				if err != nil {
 					fmt.Printf("\nFailed to rollback. Error: %v\nPlease manually rollback following the guide.\n\n", err)
 				} else {
@@ -292,37 +304,33 @@ func runUpgradeWorkflow(ctx context.Context, currentExecutablePath string,
 			}
 			fmt.Printf("\nNew OS disk hadn't been attached when failure happened. No need to rollback. "+
 				"If the instance can't work as expected, please verify whether original OS disk %v is attached "+
-				"and whether the instance has been started. If necessary, please manually rollback following the guide.\n\n", oldOSDisk)
+				"and whether the instance has been started. If necessary, please manually rollback following the guide.\n\n", params.osDisk)
 		} else {
 			if isNewOSDiskAttached {
 				fmt.Printf("\nFailed to finish upgrading. Please manually rollback following the guide.\n\n")
 			}
 		}
 		fmt.Print("\nCleaning up temporary resources...\n\n")
-		if _, err := cleanup(ctx, upgradeVarMap, project, zone, scratchBucketGcsPath, oauth, timeout, ce,
-			gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled); err != nil {
-
+		if _, err := cleanup(ctx, upgradeVarMap, params); err != nil {
 			fmt.Printf("\nFailed to cleanup temporary resources: %v\n"+
 				"Please follow the guide to manually cleanup.\n\n", err)
 		}
 	}()
 
-	fmt.Printf("%v\n\n", getUpgradeIntroduction(project, zone, getResourceRealName(instance),
-		installMediaDiskName, osDiskSnapshotName, getResourceRealName(oldOSDisk), newOSDiskName,
-		machineImageBackupName, windowsStartupScriptURLBackup, osDiskDeviceName, osDiskAutoDelete))
+	fmt.Printf("%v\n\n", getUpgradeIntroduction(params.project, params.zone, getResourceRealName(params.InstanceURI),
+		installMediaDiskName, osDiskSnapshotName, getResourceRealName(params.osDisk), newOSDiskName,
+		machineImageBackupName, windowsStartupScriptURLBackup, params.osDiskDeviceName, params.osDiskAutoDelete))
 
 	// step 1: preparation - take snapshot, attach install media, backup/set startup script
 	fmt.Print("\nPreparing for upgrade...\n\n")
-	prepareWf, err := prepare(ctx, preparationVarMap, project, zone, scratchBucketGcsPath, oauth,
-		timeout, ce, gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled, skipMachineImageBackup, instanceName)
+	prepareWf, err := prepare(ctx, preparationVarMap, params)
 	if err != nil {
 		return prepareWf, err
 	}
 
 	// step 2: run upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err := upgrade(ctx, workflowPath, upgradeVarMap, project, zone, scratchBucketGcsPath,
-		oauth, timeout, ce, gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled)
+	upgradeWf, err := upgrade(ctx, workflowPath, upgradeVarMap, params)
 	if err == nil {
 		return upgradeWf, nil
 	}
@@ -332,23 +340,18 @@ func runUpgradeWorkflow(ctx context.Context, currentExecutablePath string,
 		return upgradeWf, err
 	}
 	fmt.Print("\nRebooting...\n\n")
-	rebootWf, err := reboot(ctx, rebootVarMap, project, zone, scratchBucketGcsPath, oauth,
-		timeout, ce, gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled)
+	rebootWf, err := reboot(ctx, rebootVarMap, params)
 	if err != nil {
 		return rebootWf, err
 	}
 
 	// step 4: retry upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err = upgrade(ctx, retryWorkflowPath, upgradeVarMap, project, zone, scratchBucketGcsPath,
-		oauth, timeout, ce, gcsLogsDisabled, cloudLogsDisabled, stdoutLogsDisabled)
+	upgradeWf, err = upgrade(ctx, retryWorkflowPath, upgradeVarMap, params)
 	return upgradeWf, err
 }
 
-func prepare(ctx context.Context, preparationVarMap map[string]string, project string, zone string, scratchBucketGcsPath string,
-	oauth string, timeout string, ce string, gcsLogsDisabled bool, cloudLogsDisabled bool, stdoutLogsDisabled bool,
-	skipMachineImageBackup bool, instanceName string) (*daisy.Workflow, error) {
-
+func prepare(ctx context.Context, preparationVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
 	// 'windows-startup-script-url' exists, backup it
 	if windowsStartupScriptURLBackup != nil {
 		fmt.Printf("\nDetected current '%v', value='%v'. Will backup to '%v'.\n\n", metadataKeyWindowsStartupScriptURL,
@@ -356,8 +359,8 @@ func prepare(ctx context.Context, preparationVarMap map[string]string, project s
 		preparationVarMap["original_startup_script_url"] = *windowsStartupScriptURLBackup
 	}
 	prepWf, err := daisycommon.ParseWorkflow(upgradePreparationWorkflowPath, preparationVarMap,
-		project, zone, scratchBucketGcsPath, oauth, timeout, ce, gcsLogsDisabled,
-		cloudLogsDisabled, stdoutLogsDisabled)
+		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
+		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +374,7 @@ func prepare(ctx context.Context, preparationVarMap map[string]string, project s
 		prepWf.Dependencies["set-script"] = []string{"attach-install-disk"}
 	}
 
-	if skipMachineImageBackup {
+	if params.SkipMachineImageBackup {
 		// remove 'backup-machine-image' step
 		delete(prepWf.Steps, "backup-machine-image")
 		delete(prepWf.Dependencies, "backup-machine-image")
@@ -382,17 +385,16 @@ func prepare(ctx context.Context, preparationVarMap map[string]string, project s
 	return prepWf, err
 }
 
-func upgrade(ctx context.Context, workflowPath string, upgradeVarMap map[string]string, project string, zone string,
-	scratchBucketGcsPath string, oauth string, timeout string, ce string, gcsLogsDisabled bool,
-	cloudLogsDisabled bool, stdoutLogsDisabled bool) (*daisy.Workflow, error) {
+func upgrade(ctx context.Context, workflowPath string, upgradeVarMap map[string]string,
+	params *UpgradeParams) (*daisy.Workflow, error) {
 
 	if windowsStartupScriptURLBackup != nil {
 		upgradeVarMap["original_startup_script_url"] = *windowsStartupScriptURLBackup
 	}
 
 	upgradeWf, err := daisycommon.ParseWorkflow(workflowPath, upgradeVarMap,
-		project, zone, scratchBucketGcsPath, oauth, timeout, ce, gcsLogsDisabled,
-		cloudLogsDisabled, stdoutLogsDisabled)
+		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
+		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -401,13 +403,11 @@ func upgrade(ctx context.Context, workflowPath string, upgradeVarMap map[string]
 	return upgradeWf, err
 }
 
-func cleanup(ctx context.Context, cleanupVarMap map[string]string, project string, zone string,
-	scratchBucketGcsPath string, oauth string, timeout string, ce string, gcsLogsDisabled bool,
-	cloudLogsDisabled bool, stdoutLogsDisabled bool) (*daisy.Workflow, error) {
+func cleanup(ctx context.Context, cleanupVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
 
 	cleanupWf, err := daisycommon.ParseWorkflow(cleanupWorkflowPath, cleanupVarMap,
-		project, zone, scratchBucketGcsPath, oauth, timeout, ce, gcsLogsDisabled,
-		cloudLogsDisabled, stdoutLogsDisabled)
+		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
+		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 	if err != nil {
 		return nil, err
 	}
@@ -416,32 +416,102 @@ func cleanup(ctx context.Context, cleanupVarMap map[string]string, project strin
 	return cleanupWf, err
 }
 
-func rollback(ctx context.Context, rollbackVarMap map[string]string, project string, zone string,
-	scratchBucketGcsPath string, oauth string, timeout string, ce string, gcsLogsDisabled bool,
-	cloudLogsDisabled bool, stdoutLogsDisabled bool) (*daisy.Workflow, error) {
-
+func rollback(ctx context.Context, params *UpgradeParams, installMediaDiskName, newOSDiskName string) (*daisy.Workflow, error) {
+	originalStartupScriptURL := ""
 	if windowsStartupScriptURLBackup != nil {
-		rollbackVarMap["original_startup_script_url"] = *windowsStartupScriptURLBackup
+		originalStartupScriptURL = *windowsStartupScriptURLBackup
 	}
 
-	rollbackWf, err := daisycommon.ParseWorkflow(rollbackWorkflowPath, rollbackVarMap,
-		project, zone, scratchBucketGcsPath, oauth, timeout, ce, gcsLogsDisabled,
-		cloudLogsDisabled, stdoutLogsDisabled)
-	if err != nil {
-		return nil, err
+	rollbackWf := &daisy.Workflow{
+		Name:           "rollback",
+		DefaultTimeout: "30m",
+		Steps: map[string]*daisy.Step{
+			"stop-instance": {
+				StopInstances: &daisy.StopInstances{
+					Instances: []string{params.InstanceURI},
+				},
+			},
+			"detach-new-os-disk": {
+				DetachDisks: &daisy.DetachDisks{
+					{
+						Instance:   params.InstanceURI,
+						DeviceName: fmt.Sprintf("projects/%v/zones/%v/devices/%v", params.project, params.zone, params.osDiskDeviceName),
+					},
+				},
+			},
+			"attach-old-os-disk": {
+				AttachDisks: &daisy.AttachDisks{
+					{
+						Instance: params.InstanceURI,
+						AttachedDisk: compute.AttachedDisk{
+							Source:     params.osDisk,
+							DeviceName: params.osDiskDeviceName,
+							AutoDelete: params.osDiskAutoDelete,
+							Boot:       true,
+						},
+					},
+				},
+			},
+			"detach-install-media-disk": {
+				DetachDisks: &daisy.DetachDisks{
+					{
+						Instance:   params.InstanceURI,
+						DeviceName: fmt.Sprintf("projects/%v/zones/%v/devices/%v", params.project, params.zone, installMediaDiskName),
+					},
+				},
+			},
+			"restore-script": {
+				UpdateInstancesMetadata: &daisy.UpdateInstancesMetadata{
+					{
+						Instance: params.InstanceURI,
+						Metadata: map[string]string{
+							"windows-startup-script-url": originalStartupScriptURL,
+						},
+					},
+				},
+			},
+			"start-instance": {
+				StartInstances: &daisy.StartInstances{
+					Instances: []string{params.InstanceURI},
+				},
+			},
+			"delete-new-os-disk": {
+				DeleteResources: &daisy.DeleteResources{
+					Disks: []string{
+						fmt.Sprintf("projects/%v/zones/%v/disks/%v", params.project, params.zone, newOSDiskName),
+					},
+				},
+			},
+			"delete-install-media-disk": {
+				DeleteResources: &daisy.DeleteResources{
+					Disks: []string{
+						fmt.Sprintf("projects/%v/zones/%v/disks/%v", params.project, params.zone, installMediaDiskName),
+					},
+				},
+			},
+		},
+		Dependencies: map[string][]string{
+			"detach-new-os-disk":        {"stop-instance"},
+			"attach-old-os-disk":        {"detach-new-os-disk"},
+			"detach-install-media-disk": {"attach-old-os-disk"},
+			"restore-script":            {"detach-install-media-disk"},
+			"start-instance":            {"restore-script"},
+			"delete-new-os-disk":        {"start-instance"},
+			"delete-install-media-disk": {"start-instance"},
+		},
 	}
+	daisycommon.SetWorkflowAttributes(rollbackWf, params.project, params.zone, params.ScratchBucketGcsPath,
+		params.Oauth, params.Timeout, params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 
-	err = daisyutils.RunWorkflowWithCancelSignal(ctx, rollbackWf)
+	err := daisyutils.RunWorkflowWithCancelSignal(ctx, rollbackWf)
 	return rollbackWf, err
 }
 
-func reboot(ctx context.Context, rebootVarMap map[string]string, project string, zone string,
-	scratchBucketGcsPath string, oauth string, timeout string, ce string, gcsLogsDisabled bool,
-	cloudLogsDisabled bool, stdoutLogsDisabled bool) (*daisy.Workflow, error) {
+func reboot(ctx context.Context, rebootVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
 
 	rebootWf, err := daisycommon.ParseWorkflow(rebootWorkflowPath, rebootVarMap,
-		project, zone, scratchBucketGcsPath, oauth, timeout, ce, gcsLogsDisabled,
-		cloudLogsDisabled, stdoutLogsDisabled)
+		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
+		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 
 	if err != nil {
 		return nil, err
