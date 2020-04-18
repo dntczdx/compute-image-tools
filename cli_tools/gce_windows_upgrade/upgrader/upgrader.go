@@ -19,16 +19,10 @@ import (
 	"fmt"
 	"log"
 	"regexp"
-	"strings"
 
-	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/validation"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
-	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/option"
 )
 
@@ -133,16 +127,12 @@ type UpgradeParams struct {
 	StdoutLogsDisabled     bool
 	CurrentExecutablePath  string
 
-	validatedParams
+	*validatedParams
 }
 
 // Run runs upgrade workflow.
 func Run(upgradeParams *UpgradeParams) (*daisy.Workflow, error) {
 	log.SetPrefix(logPrefix + " ")
-
-	if err := validation.ValidateStringFlagNotEmpty(upgradeParams.ClientID, ClientIDFlagKey); err != nil {
-		return nil, err
-	}
 
 	var err error
 	ctx := context.Background()
@@ -151,117 +141,12 @@ func Run(upgradeParams *UpgradeParams) (*daisy.Workflow, error) {
 		return nil, daisy.Errf("Failed to create GCE client: %v", err)
 	}
 
-	validatedParams, err := validateParams(upgradeParams.InstanceURI, upgradeParams.SourceOS, upgradeParams.TargetOS)
+	err = validateParams(upgradeParams)
 	if err != nil {
 		return nil, err
 	}
-	*upgradeParams.ProjectPtr = validatedParams.project
 
 	return runUpgradeWorkflow(ctx, upgradeParams)
-}
-
-func validateParams(instancePath string, sourceOS string, targetOS string) (validatedParams, error) {
-	validatedParams := validatedParams{}
-
-	if sourceOS == "" {
-		return validatedParams, daisy.Errf("Flag -source-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedSourceOSVersions(), ", "))
-	}
-	if _, ok := supportedSourceOSVersions[sourceOS]; !ok {
-		return validatedParams, daisy.Errf("Flag -source-os value '%v' unsupported. Please choose a supported version from {%v}.", sourceOS, strings.Join(SupportedSourceOSVersions(), ", "))
-	}
-	if targetOS == "" {
-		return validatedParams, daisy.Errf("Flag -target-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedTargetOSVersions(), ", "))
-	}
-	if _, ok := supportedTargetOSVersions[targetOS]; !ok {
-		return validatedParams, daisy.Errf("Flag -target-os value '%v' unsupported. Please choose a supported version from {%v}.", targetOS, strings.Join(SupportedTargetOSVersions(), ", "))
-	}
-
-	// We may chain several upgrades together in the future (for example, 2008r2->2012r2->2016).
-	// For now, we only support 1-step upgrade.
-	if expectedTo, _ := supportedSourceOSVersions[sourceOS]; expectedTo != targetOS {
-		return validatedParams, daisy.Errf("Can't upgrade from %v to %v. Can only upgrade to %v.", sourceOS, targetOS, expectedTo)
-	}
-
-	if instancePath == "" {
-		return validatedParams, daisy.Errf("Flag -instance must be provided")
-	}
-	m := daisy.NamedSubexp(instanceURLRgx, instancePath)
-	if m == nil {
-		return validatedParams, daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", instancePath)
-	}
-	validatedParams.project = m["project"]
-	validatedParams.zone = m["zone"]
-	validatedParams.instanceName = m["instance"]
-
-	if err := validateInstance(&validatedParams, sourceOS); err != nil {
-		return validatedParams, err
-	}
-
-	return validatedParams, nil
-}
-
-func validateInstance(validatedParams *validatedParams, sourceOS string) error {
-	inst, err := computeClient.GetInstance(validatedParams.project, validatedParams.zone, validatedParams.instanceName)
-	if err != nil {
-		return daisy.Errf("Failed to get instance: %v", err)
-	}
-	if err := validateLicense(inst, sourceOS); err != nil {
-		return err
-	}
-
-	if err := validateOSDisk(inst.Disks[0], validatedParams, err); err != nil {
-		return err
-	}
-
-	for _, metadataItem := range inst.Metadata.Items {
-		if metadataItem.Key == metadataKeyWindowsStartupScriptURL {
-			windowsStartupScriptURLBackup = metadataItem.Value
-		} else if metadataItem.Key == metadataKeyWindowsStartupScriptURLBackup {
-			windowsStartupScriptURLBackupExists = true
-		}
-	}
-	// If script url backup exists, don't backup again to overwrite it
-	if windowsStartupScriptURLBackupExists {
-		windowsStartupScriptURLBackup = nil
-		fmt.Printf("\n'%v' was backed up to '%v' before.\n\n",
-			metadataKeyWindowsStartupScriptURL, metadataKeyWindowsStartupScriptURLBackup)
-	}
-	return nil
-}
-
-func validateOSDisk(osDisk *compute.AttachedDisk, validatedParams *validatedParams, err error) error {
-	validatedParams.osDisk = param.GetZonalResourcePath(validatedParams.zone, "disks", osDisk.Source)
-	osDiskName := getResourceRealName(osDisk.Source)
-	d, err := computeClient.GetDisk(validatedParams.project, validatedParams.zone, osDiskName)
-	if err != nil {
-		return daisy.Errf("Failed to get OS disk info: %v", err)
-	}
-	validatedParams.osDiskDeviceName = osDisk.DeviceName
-	validatedParams.osDiskAutoDelete = osDisk.AutoDelete
-	validatedParams.osDiskType = getResourceRealName(d.Type)
-	return nil
-}
-
-func validateLicense(inst *compute.Instance, sourceOS string) error {
-	matchSourceOSVersion := false
-	upgraded := false
-	if len(inst.Disks) == 0 {
-		return daisy.Errf("No disks attached to the instance.")
-	}
-	for _, lic := range inst.Disks[0].Licenses {
-		if strings.HasSuffix(lic, expectedLicense[sourceOS]) {
-			matchSourceOSVersion = true
-		} else if strings.HasSuffix(lic, appendLicense[sourceOS]) {
-			upgraded = true
-		}
-	}
-	if !matchSourceOSVersion {
-		return daisy.Errf(fmt.Sprintf("Can only upgrade GCE instance with %v license attached", expectedLicense[sourceOS]))
-	}
-	if upgraded {
-		return daisy.Errf(fmt.Sprintf("The GCE instance is with %v license attached, which measn it either has been upgraded or has started a upgrade in the past.", appendLicense[sourceOS]))
-	}
-	return nil
 }
 
 func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Workflow, error) {
@@ -349,180 +234,4 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 	fmt.Print("\nRunning upgrade...\n\n")
 	upgradeWf, err = upgrade(ctx, retryWorkflowPath, upgradeVarMap, params)
 	return upgradeWf, err
-}
-
-func prepare(ctx context.Context, preparationVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
-	// 'windows-startup-script-url' exists, backup it
-	if windowsStartupScriptURLBackup != nil {
-		fmt.Printf("\nDetected current '%v', value='%v'. Will backup to '%v'.\n\n", metadataKeyWindowsStartupScriptURL,
-			*windowsStartupScriptURLBackup, metadataKeyWindowsStartupScriptURLBackup)
-		preparationVarMap["original_startup_script_url"] = *windowsStartupScriptURLBackup
-	}
-	prepWf, err := daisycommon.ParseWorkflow(upgradePreparationWorkflowPath, preparationVarMap,
-		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
-		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
-	if err != nil {
-		return nil, err
-	}
-	if windowsStartupScriptURLBackup == nil {
-		if !windowsStartupScriptURLBackupExists {
-			fmt.Printf("\nNo existing '%v' detected. Won't backup it.\n\n", metadataKeyWindowsStartupScriptURL)
-		}
-		// remove 'backup-script' step
-		delete(prepWf.Steps, "backup-script")
-		delete(prepWf.Dependencies, "backup-script")
-		prepWf.Dependencies["set-script"] = []string{"attach-install-disk"}
-	}
-
-	if params.SkipMachineImageBackup {
-		// remove 'backup-machine-image' step
-		delete(prepWf.Steps, "backup-machine-image")
-		delete(prepWf.Dependencies, "backup-machine-image")
-		prepWf.Dependencies["backup-os-disk-snapshot"] = []string{"stop-instance"}
-	}
-
-	err = daisyutils.RunWorkflowWithCancelSignal(ctx, prepWf)
-	return prepWf, err
-}
-
-func upgrade(ctx context.Context, workflowPath string, upgradeVarMap map[string]string,
-	params *UpgradeParams) (*daisy.Workflow, error) {
-
-	if windowsStartupScriptURLBackup != nil {
-		upgradeVarMap["original_startup_script_url"] = *windowsStartupScriptURLBackup
-	}
-
-	upgradeWf, err := daisycommon.ParseWorkflow(workflowPath, upgradeVarMap,
-		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
-		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
-	if err != nil {
-		return nil, err
-	}
-
-	err = daisyutils.RunWorkflowWithCancelSignal(ctx, upgradeWf)
-	return upgradeWf, err
-}
-
-func cleanup(ctx context.Context, cleanupVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
-
-	cleanupWf, err := daisycommon.ParseWorkflow(cleanupWorkflowPath, cleanupVarMap,
-		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
-		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
-	if err != nil {
-		return nil, err
-	}
-
-	err = daisyutils.RunWorkflowWithCancelSignal(ctx, cleanupWf)
-	return cleanupWf, err
-}
-
-func rollback(ctx context.Context, params *UpgradeParams, installMediaDiskName, newOSDiskName string) (*daisy.Workflow, error) {
-	originalStartupScriptURL := ""
-	if windowsStartupScriptURLBackup != nil {
-		originalStartupScriptURL = *windowsStartupScriptURLBackup
-	}
-
-	rollbackWf := &daisy.Workflow{
-		Name:           "rollback",
-		DefaultTimeout: "30m",
-		Steps: map[string]*daisy.Step{
-			"stop-instance": {
-				StopInstances: &daisy.StopInstances{
-					Instances: []string{params.InstanceURI},
-				},
-			},
-			"detach-new-os-disk": {
-				DetachDisks: &daisy.DetachDisks{
-					{
-						Instance:   params.InstanceURI,
-						DeviceName: fmt.Sprintf("projects/%v/zones/%v/devices/%v", params.project, params.zone, params.osDiskDeviceName),
-					},
-				},
-			},
-			"attach-old-os-disk": {
-				AttachDisks: &daisy.AttachDisks{
-					{
-						Instance: params.InstanceURI,
-						AttachedDisk: compute.AttachedDisk{
-							Source:     params.osDisk,
-							DeviceName: params.osDiskDeviceName,
-							AutoDelete: params.osDiskAutoDelete,
-							Boot:       true,
-						},
-					},
-				},
-			},
-			"detach-install-media-disk": {
-				DetachDisks: &daisy.DetachDisks{
-					{
-						Instance:   params.InstanceURI,
-						DeviceName: fmt.Sprintf("projects/%v/zones/%v/devices/%v", params.project, params.zone, installMediaDiskName),
-					},
-				},
-			},
-			"restore-script": {
-				UpdateInstancesMetadata: &daisy.UpdateInstancesMetadata{
-					{
-						Instance: params.InstanceURI,
-						Metadata: map[string]string{
-							"windows-startup-script-url": originalStartupScriptURL,
-						},
-					},
-				},
-			},
-			"start-instance": {
-				StartInstances: &daisy.StartInstances{
-					Instances: []string{params.InstanceURI},
-				},
-			},
-			"delete-new-os-disk": {
-				DeleteResources: &daisy.DeleteResources{
-					Disks: []string{
-						fmt.Sprintf("projects/%v/zones/%v/disks/%v", params.project, params.zone, newOSDiskName),
-					},
-				},
-			},
-			"delete-install-media-disk": {
-				DeleteResources: &daisy.DeleteResources{
-					Disks: []string{
-						fmt.Sprintf("projects/%v/zones/%v/disks/%v", params.project, params.zone, installMediaDiskName),
-					},
-				},
-			},
-		},
-		Dependencies: map[string][]string{
-			"detach-new-os-disk":        {"stop-instance"},
-			"attach-old-os-disk":        {"detach-new-os-disk"},
-			"detach-install-media-disk": {"attach-old-os-disk"},
-			"restore-script":            {"detach-install-media-disk"},
-			"start-instance":            {"restore-script"},
-			"delete-new-os-disk":        {"start-instance"},
-			"delete-install-media-disk": {"start-instance"},
-		},
-	}
-	daisycommon.SetWorkflowAttributes(rollbackWf, params.project, params.zone, params.ScratchBucketGcsPath,
-		params.Oauth, params.Timeout, params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
-
-	err := daisyutils.RunWorkflowWithCancelSignal(ctx, rollbackWf)
-	return rollbackWf, err
-}
-
-func reboot(ctx context.Context, rebootVarMap map[string]string, params *UpgradeParams) (*daisy.Workflow, error) {
-
-	rebootWf, err := daisycommon.ParseWorkflow(rebootWorkflowPath, rebootVarMap,
-		params.project, params.zone, params.ScratchBucketGcsPath, params.Oauth, params.Timeout,
-		params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
-
-	if err != nil {
-		return nil, err
-	}
-	err = daisyutils.RunWorkflowWithCancelSignal(ctx, rebootWf)
-	if err != nil {
-		return rebootWf, err
-	}
-	return nil, nil
-}
-
-func needReboot(err error) bool {
-	return strings.Contains(err.Error(), "Windows needs to be restarted")
 }

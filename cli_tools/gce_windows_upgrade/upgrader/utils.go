@@ -17,6 +17,9 @@ package upgrader
 import (
 	"fmt"
 	"strings"
+
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
+	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 )
 
 func reverseMap(m map[string]string) map[string]string {
@@ -70,6 +73,11 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 		// failed to fetch info. Can't guarantee new OS disk is attached.
 		return false
 	}
+	if inst.Disks == nil || len(inst.Disks) == 0 || inst.Disks[0].Boot == false {
+		// if the instance has no boot disk attached
+		return false
+	}
+
 	currentBootDiskURL := inst.Disks[0].Source
 
 	// ignore project / zone, only compare real name, because it's guaranteed that
@@ -122,4 +130,13 @@ func buildDaisyVarsForReboot(instance string) map[string]string {
 	varMap["instance"] = instance
 
 	return varMap
+}
+
+func needReboot(err error) bool {
+	return strings.Contains(err.Error(), "Windows needs to be restarted")
+}
+
+func setWorkflowAttributes(w *daisy.Workflow, params *UpgradeParams) {
+	daisycommon.SetWorkflowAttributes(w, params.project, params.zone, params.ScratchBucketGcsPath,
+		params.Oauth, params.Timeout, params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
 }
