@@ -46,8 +46,8 @@ const (
 	versionWindows2008r2 = "windows-2008r2"
 	versionWindows2012r2 = "windows-2012r2"
 
-	upgradeIntroductionTemplate = "The following resources will be created/touched during the upgrade. " +
-		"Please record their name in order for cleanup or manual rollback.\n" +
+	upgradeIntroductionTemplate = "The following resources will be created/accessed during the upgrade. " +
+		"Please keep track of their names if manual cleanup and/or rollback are necessary.\n" +
 		"All resources are in project '%v', zone '%v'.\n" +
 		"1. Instance: %v\n" +
 		"2. Disk for install media: %v\n" +
@@ -58,8 +58,9 @@ const (
 		"5. New OS disk: %v\n" +
 		"6. Machine image: %v\n" +
 		"7. Original startup script url '%v': %v\n" +
-		"\n" +
-		"When upgrading succeeded but cleanup failed, please manually cleanup by following steps:\n" +
+		"\n"
+
+	guideTemplate = "When upgrading succeeded but cleanup failed, please manually cleanup by following steps:\n" +
 		"1. Delete 'windows-startup-script-url' from the instance's metadata if there isn't an original value. " +
 		"If there is an original value, restore it. The original value is backed up as metadata 'windows-startup-script-url-backup'.\n" +
 		"2. Detach the install media disk from the instance and delete it.\n" +
@@ -88,8 +89,8 @@ var (
 	upgradeWorkflowPath      = map[string]string{versionWindows2008r2: "daisy_workflows/windows_upgrade/windows_upgrade_2008r2_to_2012r2.wf.json"}
 	retryUpgradeWorkflowPath = map[string]string{versionWindows2008r2: "daisy_workflows/windows_upgrade/windows_upgrade_2008r2_to_2012r2_retry.wf.json"}
 
-	expectedLicense = map[string]string{versionWindows2008r2: "projects/windows-cloud/global/licenses/windows-server-2008-r2-dc"}
-	appendLicense   = map[string]string{versionWindows2008r2: "projects/windows-cloud/global/licenses/windows-server-2012-r2-dc-in-place-upgrade"}
+	expectedCurrentLicense = map[string]string{versionWindows2008r2: "projects/windows-cloud/global/licenses/windows-server-2008-r2-dc"}
+	licenseToAdd           = map[string]string{versionWindows2008r2: "projects/windows-cloud/global/licenses/windows-server-2012-r2-dc-in-place-upgrade"}
 
 	instanceURLRgx = regexp.MustCompile(fmt.Sprintf(`^(projects/(?P<project>%[1]s)/)?zones/(?P<zone>%[2]s)/instances/(?P<instance>%[2]s)$`, projectRgxStr, rfc1035))
 
@@ -154,9 +155,9 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 	workflowPath := path.ToWorkingDir(upgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
 	retryWorkflowPath := path.ToWorkingDir(retryUpgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
 	suffix := path.RandString(8)
-	machineImageBackupName := fmt.Sprintf("backup-machine-image-%v", suffix)
-	osDiskSnapshotName := fmt.Sprintf("win-upgrade-os-disk-snapshot-%v", suffix)
-	newOSDiskName := fmt.Sprintf("windows-upgraded-os-disk-%v", suffix)
+	machineImageBackupName := fmt.Sprintf("windows-upgrade-backup-%v", suffix)
+	osDiskSnapshotName := fmt.Sprintf("windows-upgrade-backup-os-%v", suffix)
+	newOSDiskName := fmt.Sprintf("windows-upgraded-os-%v", suffix)
 	installMediaDiskName := fmt.Sprintf("windows-install-media-%v", suffix)
 
 	preparationVarMap := buildDaisyVarsForPreparation(params.project, params.zone, params.InstanceURI, machineImageBackupName,
@@ -165,7 +166,7 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 	upgradeVarMap := buildDaisyVarsForUpgrade(params.project, params.zone, params.InstanceURI, installMediaDiskName)
 	rebootVarMap := buildDaisyVarsForReboot(params.InstanceURI)
 
-	// If upgrade failed, run cleanup/rollback before exiting.
+	// If upgrade failed, run cleanup or rollback before exiting.
 	defer func() {
 		if err == nil {
 			fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", params.InstanceURI, params.TargetOS)
@@ -177,7 +178,7 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 		isNewOSDiskAttached := isNewOSDiskAttached(params.project, params.zone, params.instanceName, newOSDiskName)
 		if params.AutoRollback {
 			if isNewOSDiskAttached {
-				fmt.Printf("\nFailed to finish upgrading. Rollback to original state from original OS disk '%v'...\n\n", params.osDisk)
+				fmt.Printf("\nFailed to finish upgrading. Rollback to the original state from the original OS disk '%v'...\n\n", params.osDisk)
 				_, err := rollback(ctx, params, installMediaDiskName, newOSDiskName)
 				if err != nil {
 					fmt.Printf("\nFailed to rollback. Error: %v\nPlease manually rollback following the guide.\n\n", err)

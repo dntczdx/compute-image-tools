@@ -121,17 +121,17 @@ func validateLicense(inst *compute.Instance, sourceOS string) error {
 		return daisy.Errf("No disks attached to the instance.")
 	}
 	for _, lic := range inst.Disks[0].Licenses {
-		if strings.HasSuffix(lic, expectedLicense[sourceOS]) {
+		if strings.HasSuffix(lic, expectedCurrentLicense[sourceOS]) {
 			matchSourceOSVersion = true
-		} else if strings.HasSuffix(lic, appendLicense[sourceOS]) {
+		} else if strings.HasSuffix(lic, licenseToAdd[sourceOS]) {
 			upgraded = true
 		}
 	}
 	if !matchSourceOSVersion {
-		return daisy.Errf(fmt.Sprintf("Can only upgrade GCE instance with %v license attached", expectedLicense[sourceOS]))
+		return daisy.Errf(fmt.Sprintf("Can only upgrade GCE instance with %v license attached", expectedCurrentLicense[sourceOS]))
 	}
 	if upgraded {
-		return daisy.Errf(fmt.Sprintf("The GCE instance is with %v license attached, which measn it either has been upgraded or has started a upgrade in the past.", appendLicense[sourceOS]))
+		return daisy.Errf(fmt.Sprintf("The GCE instance is with %v license attached, which means it either has been upgraded or has started a upgrade in the past.", licenseToAdd[sourceOS]))
 	}
 	return nil
 }

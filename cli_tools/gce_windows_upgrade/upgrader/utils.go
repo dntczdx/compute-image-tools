@@ -56,10 +56,13 @@ func getUpgradeIntroduction(project, zone, instanceName, installMediaDiskName,
 	if oldStartupScriptURLPtr != nil {
 		oldStartupScriptURL = *oldStartupScriptURLPtr
 	}
+	if machineImageName == "" {
+		machineImageName = "None"
+	}
 	return fmt.Sprintf(upgradeIntroductionTemplate, project, zone, instanceName,
 		installMediaDiskName, osDiskSnapshotName, oldOSDiskName, osDiskDeviceName,
 		osDiskAutoDelete, newOSDiskName, machineImageName, metadataKeyWindowsStartupScriptURL,
-		oldStartupScriptURL)
+		oldStartupScriptURL) + guideTemplate
 }
 
 func getResourceRealName(resourceURI string) string {
@@ -108,7 +111,7 @@ func buildDaisyVarsForPreparation(project, zone, instance, machineImageBackupNam
 	} else {
 		varMap["os_disk_auto_delete"] = "false"
 	}
-	varMap["upgraded_license"] = appendLicense[sourceOS]
+	varMap["upgraded_license"] = licenseToAdd[sourceOS]
 
 	return varMap
 }
