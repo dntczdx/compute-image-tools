@@ -47,7 +47,7 @@ var (
 
 func upgradeEntry() (*daisy.Workflow, error) {
 	currentExecutablePath := string(os.Args[0])
-	upgradeParams := &upgrader.UpgradeParams{
+	u := &upgrader.Upgrader{
 		ClientID:               strings.TrimSpace(*clientID),
 		InstanceURI:            strings.TrimSpace(*instance),
 		SkipMachineImageBackup: *skipMachineImageBackup,
@@ -65,7 +65,7 @@ func upgradeEntry() (*daisy.Workflow, error) {
 		CurrentExecutablePath:  currentExecutablePath,
 	}
 
-	return upgrader.Run(upgradeParams)
+	return u.Run()
 }
 
 func main() {

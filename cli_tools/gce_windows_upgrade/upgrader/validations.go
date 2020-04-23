@@ -19,98 +19,112 @@ import (
 	"strings"
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/validation"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	"google.golang.org/api/compute/v1"
 )
 
-func validateParams(params *UpgradeParams) error {
-	if err := validation.ValidateStringFlagNotEmpty(params.ClientID, ClientIDFlagKey); err != nil {
+func (u *Upgrader) validateParams() error {
+	if u.derivedVars == nil {
+		u.derivedVars = &derivedVars{}
+	}
+
+	if err := validation.ValidateStringFlagNotEmpty(u.ClientID, ClientIDFlagKey); err != nil {
 		return err
 	}
 
-	if params.SourceOS == "" {
+	if u.SourceOS == "" {
 		return daisy.Errf("Flag -source-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedSourceOSVersions(), ", "))
 	}
-	if _, ok := supportedSourceOSVersions[params.SourceOS]; !ok {
-		return daisy.Errf("Flag -source-os value '%v' unsupported. Please choose a supported version from {%v}.", params.SourceOS, strings.Join(SupportedSourceOSVersions(), ", "))
+	if _, ok := supportedSourceOSVersions[u.SourceOS]; !ok {
+		return daisy.Errf("Flag -source-os value '%v' unsupported. Please choose a supported version from {%v}.", u.SourceOS, strings.Join(SupportedSourceOSVersions(), ", "))
 	}
-	if params.TargetOS == "" {
+	if u.TargetOS == "" {
 		return daisy.Errf("Flag -target-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedTargetOSVersions(), ", "))
 	}
-	if _, ok := supportedTargetOSVersions[params.TargetOS]; !ok {
-		return daisy.Errf("Flag -target-os value '%v' unsupported. Please choose a supported version from {%v}.", params.TargetOS, strings.Join(SupportedTargetOSVersions(), ", "))
+	if _, ok := supportedTargetOSVersions[u.TargetOS]; !ok {
+		return daisy.Errf("Flag -target-os value '%v' unsupported. Please choose a supported version from {%v}.", u.TargetOS, strings.Join(SupportedTargetOSVersions(), ", "))
 	}
 
 	// We may chain several upgrades together in the future (for example, 2008r2->2012r2->2016).
 	// For now, we only support 1-step upgrade.
-	if expectedTo, _ := supportedSourceOSVersions[params.SourceOS]; expectedTo != params.TargetOS {
-		return daisy.Errf("Can't upgrade from %v to %v. Can only upgrade to %v.", params.SourceOS, params.TargetOS, expectedTo)
+	if expectedTo, _ := supportedSourceOSVersions[u.SourceOS]; expectedTo != u.TargetOS {
+		return daisy.Errf("Can't upgrade from %v to %v. Can only upgrade to %v.", u.SourceOS, u.TargetOS, expectedTo)
 	}
 
-	if params.InstanceURI == "" {
+	if u.InstanceURI == "" {
 		return daisy.Errf("Flag -instance must be provided")
 	}
-	m := daisy.NamedSubexp(instanceURLRgx, params.InstanceURI)
+	m := daisy.NamedSubexp(instanceURLRgx, u.InstanceURI)
 	if m == nil {
-		return daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", params.InstanceURI)
+		return daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", u.InstanceURI)
 	}
 
-	params.validatedParams = &validatedParams{
-		project:      m["project"],
-		zone:         m["zone"],
-		instanceName: m["instance"],
+	if u.Timeout == "" {
+		u.Timeout = DefaultTimeout
 	}
 
-	if err := validateInstance(params); err != nil {
+	u.project = m["project"]
+	u.zone = m["zone"]
+	u.instanceName = m["instance"]
+
+	if err := validateInstance(u.derivedVars, u.SourceOS); err != nil {
 		return err
 	}
 
+	// Prepare resource names with a random suffix
+	suffix := path.RandString(8)
+	u.machineImageBackupName = fmt.Sprintf("windows-upgrade-backup-%v", suffix)
+	u.osDiskSnapshotName = fmt.Sprintf("windows-upgrade-backup-os-%v", suffix)
+	u.newOSDiskName = fmt.Sprintf("windows-upgraded-os-%v", suffix)
+	u.installMediaDiskName = fmt.Sprintf("windows-install-media-%v", suffix)
+
 	// Update 'project' value for logging purpose
-	*params.ProjectPtr = params.project
+	*u.ProjectPtr = u.project
 
 	return nil
 }
 
-func validateInstance(params *UpgradeParams) error {
-	inst, err := computeClient.GetInstance(params.project, params.zone, params.instanceName)
+func validateInstance(derivedVars *derivedVars, sourceOS string) error {
+	inst, err := computeClient.GetInstance(derivedVars.project, derivedVars.zone, derivedVars.instanceName)
 	if err != nil {
 		return daisy.Errf("Failed to get instance: %v", err)
 	}
-	if err := validateLicense(inst, params.SourceOS); err != nil {
+	if err := validateLicense(inst, sourceOS); err != nil {
 		return err
 	}
 
-	if err := validateOSDisk(inst.Disks[0], params.validatedParams); err != nil {
+	if err := validateOSDisk(inst.Disks[0], derivedVars); err != nil {
 		return err
 	}
 
 	for _, metadataItem := range inst.Metadata.Items {
 		if metadataItem.Key == metadataKeyWindowsStartupScriptURL {
-			windowsStartupScriptURLBackup = metadataItem.Value
+			derivedVars.windowsStartupScriptURLBackup = metadataItem.Value
 		} else if metadataItem.Key == metadataKeyWindowsStartupScriptURLBackup {
-			windowsStartupScriptURLBackupExists = true
+			derivedVars.windowsStartupScriptURLBackupExists = true
 		}
 	}
-	// If script url backup exists, don't backup again to overwrite it
-	if windowsStartupScriptURLBackupExists {
-		windowsStartupScriptURLBackup = nil
+	// If script url backup exists, don't backup again to avoid overwriting
+	if derivedVars.windowsStartupScriptURLBackupExists {
+		derivedVars.windowsStartupScriptURLBackup = nil
 		fmt.Printf("\n'%v' was backed up to '%v' before.\n\n",
 			metadataKeyWindowsStartupScriptURL, metadataKeyWindowsStartupScriptURLBackup)
 	}
 	return nil
 }
 
-func validateOSDisk(osDisk *compute.AttachedDisk, validatedParams *validatedParams) error {
-	validatedParams.osDisk = param.GetZonalResourcePath(validatedParams.zone, "disks", osDisk.Source)
+func validateOSDisk(osDisk *compute.AttachedDisk, derivedVars *derivedVars) error {
+	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.zone, "disks", osDisk.Source)
 	osDiskName := getResourceRealName(osDisk.Source)
-	d, err := computeClient.GetDisk(validatedParams.project, validatedParams.zone, osDiskName)
+	d, err := computeClient.GetDisk(derivedVars.project, derivedVars.zone, osDiskName)
 	if err != nil {
 		return daisy.Errf("Failed to get OS disk info: %v", err)
 	}
-	validatedParams.osDiskDeviceName = osDisk.DeviceName
-	validatedParams.osDiskAutoDelete = osDisk.AutoDelete
-	validatedParams.osDiskType = getResourceRealName(d.Type)
+	derivedVars.osDiskDeviceName = osDisk.DeviceName
+	derivedVars.osDiskAutoDelete = osDisk.AutoDelete
+	derivedVars.osDiskType = getResourceRealName(d.Type)
 	return nil
 }
 

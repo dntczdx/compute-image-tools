@@ -89,33 +89,6 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 	return currentBootDiskName == newOSDiskName
 }
 
-func buildDaisyVarsForPreparation(project, zone, instance, machineImageBackupName,
-	osDiskSnapshotName, newOSDiskName, installMedia, upgradeScriptName, sourceOS,
-	oldOSDisk, osDiskType, osDiskDeviceName string, osDiskAutoDelete bool) map[string]string {
-
-	varMap := map[string]string{}
-
-	varMap["project"] = project
-	varMap["zone"] = zone
-	varMap["instance"] = instance
-	varMap["install_media"] = installMedia
-	varMap["upgrade_script_name"] = upgradeScriptName
-	varMap["machine_image_backup_name"] = machineImageBackupName
-	varMap["os_disk_snapshot_name"] = osDiskSnapshotName
-	varMap["new_os_disk_name"] = newOSDiskName
-	varMap["old_os_disk"] = oldOSDisk
-	varMap["os_disk_type"] = osDiskType
-	varMap["os_disk_device_name"] = osDiskDeviceName
-	if osDiskAutoDelete {
-		varMap["os_disk_auto_delete"] = "true"
-	} else {
-		varMap["os_disk_auto_delete"] = "false"
-	}
-	varMap["upgraded_license"] = licenseToAdd[sourceOS]
-
-	return varMap
-}
-
 func buildDaisyVarsForUpgrade(project string, zone string, instance string, installMedia string) map[string]string {
 	varMap := map[string]string{}
 
@@ -139,7 +112,7 @@ func needReboot(err error) bool {
 	return strings.Contains(err.Error(), "Windows needs to be restarted")
 }
 
-func setWorkflowAttributes(w *daisy.Workflow, params *UpgradeParams) {
-	daisycommon.SetWorkflowAttributes(w, params.project, params.zone, params.ScratchBucketGcsPath,
-		params.Oauth, params.Timeout, params.Ce, params.GcsLogsDisabled, params.CloudLogsDisabled, params.StdoutLogsDisabled)
+func setWorkflowAttributes(w *daisy.Workflow, u *Upgrader) {
+	daisycommon.SetWorkflowAttributes(w, u.project, u.zone, u.ScratchBucketGcsPath,
+		u.Oauth, u.Timeout, u.Ce, u.GcsLogsDisabled, u.CloudLogsDisabled, u.StdoutLogsDisabled)
 }

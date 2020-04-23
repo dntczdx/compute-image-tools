@@ -29,12 +29,12 @@ import (
 // Parameter key shared with external packages
 const (
 	ClientIDFlagKey = "client_id"
+	DefaultTimeout = "90m"
 )
 
 const (
 	logPrefix                      = "[windows-upgrade]"
 	rebootWorkflowPath             = "daisy_workflows/windows_upgrade/reboot.wf.json"
-	upgradePreparationWorkflowPath = "daisy_workflows/windows_upgrade/windows_upgrade_preparation.wf.json"
 	cleanupWorkflowPath            = "daisy_workflows/windows_upgrade/cleanup.wf.json"
 
 	rfc1035       = "[a-z]([-a-z0-9]*[a-z0-9])?"
@@ -94,24 +94,31 @@ var (
 
 	instanceURLRgx = regexp.MustCompile(fmt.Sprintf(`^(projects/(?P<project>%[1]s)/)?zones/(?P<zone>%[2]s)/instances/(?P<instance>%[2]s)$`, projectRgxStr, rfc1035))
 
-	windowsStartupScriptURLBackup       *string
-	windowsStartupScriptURLBackupExists bool
-
 	computeClient daisyCompute.Client
 )
 
-type validatedParams struct {
-	project          string
-	zone             string
-	instanceName     string
-	osDisk           string
+type derivedVars struct {
+	project string
+	zone    string
+
+	osDiskURI        string
 	osDiskType       string
 	osDiskDeviceName string
 	osDiskAutoDelete bool
+
+	instanceName           string
+	machineImageBackupName string
+	osDiskSnapshotName     string
+	newOSDiskName          string
+	installMediaDiskName   string
+
+	windowsStartupScriptURLBackup       *string
+	windowsStartupScriptURLBackupExists bool
 }
 
-// UpgradeParams contains user input params and validated (transformed) params
-type UpgradeParams struct {
+// Upgrader implements upgrading logic.
+type Upgrader struct {
+	// Input params
 	ClientID               string
 	InstanceURI            string
 	SkipMachineImageBackup bool
@@ -128,58 +135,50 @@ type UpgradeParams struct {
 	StdoutLogsDisabled     bool
 	CurrentExecutablePath  string
 
-	*validatedParams
+	*derivedVars
 }
 
 // Run runs upgrade workflow.
-func Run(upgradeParams *UpgradeParams) (*daisy.Workflow, error) {
+func (u *Upgrader) Run() (*daisy.Workflow, error) {
 	log.SetPrefix(logPrefix + " ")
 
 	var err error
 	ctx := context.Background()
-	computeClient, err = daisyCompute.NewClient(ctx, option.WithCredentialsFile(upgradeParams.Oauth))
+	computeClient, err = daisyCompute.NewClient(ctx, option.WithCredentialsFile(u.Oauth))
 	if err != nil {
 		return nil, daisy.Errf("Failed to create GCE client: %v", err)
 	}
 
-	err = validateParams(upgradeParams)
+	err = u.validateParams()
 	if err != nil {
 		return nil, err
 	}
 
-	return runUpgradeWorkflow(ctx, upgradeParams)
+	return u.runUpgradeWorkflow(ctx)
 }
 
-func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Workflow, error) {
+func (u *Upgrader) runUpgradeWorkflow(ctx context.Context) (*daisy.Workflow, error) {
 	var err error
-	workflowPath := path.ToWorkingDir(upgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
-	retryWorkflowPath := path.ToWorkingDir(retryUpgradeWorkflowPath[params.SourceOS], params.CurrentExecutablePath)
-	suffix := path.RandString(8)
-	machineImageBackupName := fmt.Sprintf("windows-upgrade-backup-%v", suffix)
-	osDiskSnapshotName := fmt.Sprintf("windows-upgrade-backup-os-%v", suffix)
-	newOSDiskName := fmt.Sprintf("windows-upgraded-os-%v", suffix)
-	installMediaDiskName := fmt.Sprintf("windows-install-media-%v", suffix)
+	workflowPath := path.ToWorkingDir(upgradeWorkflowPath[u.SourceOS], u.CurrentExecutablePath)
+	retryWorkflowPath := path.ToWorkingDir(retryUpgradeWorkflowPath[u.SourceOS], u.CurrentExecutablePath)
 
-	preparationVarMap := buildDaisyVarsForPreparation(params.project, params.zone, params.InstanceURI, machineImageBackupName,
-		osDiskSnapshotName, newOSDiskName, installMediaDiskName, upgradeScriptName[params.SourceOS],
-		params.SourceOS, params.osDisk, params.osDiskType, params.osDiskDeviceName, params.osDiskAutoDelete)
-	upgradeVarMap := buildDaisyVarsForUpgrade(params.project, params.zone, params.InstanceURI, installMediaDiskName)
-	rebootVarMap := buildDaisyVarsForReboot(params.InstanceURI)
+	upgradeVarMap := buildDaisyVarsForUpgrade(u.project, u.zone, u.InstanceURI, u.installMediaDiskName)
+	rebootVarMap := buildDaisyVarsForReboot(u.InstanceURI)
 
 	// If upgrade failed, run cleanup or rollback before exiting.
 	defer func() {
 		if err == nil {
-			fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", params.InstanceURI, params.TargetOS)
+			fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", u.InstanceURI, u.TargetOS)
 			fmt.Printf("\nPlease verify the functionality of the instance. If " +
 				"it has a problem and can't be fixed, please manually rollback following the guide.\n\n")
 			return
 		}
 
-		isNewOSDiskAttached := isNewOSDiskAttached(params.project, params.zone, params.instanceName, newOSDiskName)
-		if params.AutoRollback {
+		isNewOSDiskAttached := isNewOSDiskAttached(u.project, u.zone, u.instanceName, u.newOSDiskName)
+		if u.AutoRollback {
 			if isNewOSDiskAttached {
-				fmt.Printf("\nFailed to finish upgrading. Rollback to the original state from the original OS disk '%v'...\n\n", params.osDisk)
-				_, err := rollback(ctx, params, installMediaDiskName, newOSDiskName)
+				fmt.Printf("\nFailed to finish upgrading. Rollback to the original state from the original OS disk '%v'...\n\n", u.osDiskURI)
+				_, err := u.rollback(ctx)
 				if err != nil {
 					fmt.Printf("\nFailed to rollback. Error: %v\nPlease manually rollback following the guide.\n\n", err)
 				} else {
@@ -190,33 +189,33 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 			}
 			fmt.Printf("\nNew OS disk hadn't been attached when failure happened. No need to rollback. "+
 				"If the instance can't work as expected, please verify whether original OS disk %v is attached "+
-				"and whether the instance has been started. If necessary, please manually rollback following the guide.\n\n", params.osDisk)
+				"and whether the instance has been started. If necessary, please manually rollback following the guide.\n\n", u.osDiskURI)
 		} else {
 			if isNewOSDiskAttached {
 				fmt.Printf("\nFailed to finish upgrading. Please manually rollback following the guide.\n\n")
 			}
 		}
 		fmt.Print("\nCleaning up temporary resources...\n\n")
-		if _, err := cleanup(ctx, upgradeVarMap, params); err != nil {
+		if _, err := cleanup(ctx, upgradeVarMap, u); err != nil {
 			fmt.Printf("\nFailed to cleanup temporary resources: %v\n"+
 				"Please follow the guide to manually cleanup.\n\n", err)
 		}
 	}()
 
-	fmt.Printf("%v\n\n", getUpgradeIntroduction(params.project, params.zone, getResourceRealName(params.InstanceURI),
-		installMediaDiskName, osDiskSnapshotName, getResourceRealName(params.osDisk), newOSDiskName,
-		machineImageBackupName, windowsStartupScriptURLBackup, params.osDiskDeviceName, params.osDiskAutoDelete))
+	fmt.Printf("%v\n\n", getUpgradeIntroduction(u.project, u.zone, getResourceRealName(u.InstanceURI),
+		u.installMediaDiskName, u.osDiskSnapshotName, getResourceRealName(u.osDiskURI), u.newOSDiskName,
+		u.machineImageBackupName, u.windowsStartupScriptURLBackup, u.osDiskDeviceName, u.osDiskAutoDelete))
 
 	// step 1: preparation - take snapshot, attach install media, backup/set startup script
 	fmt.Print("\nPreparing for upgrade...\n\n")
-	prepareWf, err := prepare(ctx, preparationVarMap, params)
+	prepareWf, err := u.prepare(ctx)
 	if err != nil {
 		return prepareWf, err
 	}
 
 	// step 2: run upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err := upgrade(ctx, workflowPath, upgradeVarMap, params)
+	upgradeWf, err := upgrade(ctx, workflowPath, upgradeVarMap, u)
 	if err == nil {
 		return upgradeWf, nil
 	}
@@ -226,13 +225,13 @@ func runUpgradeWorkflow(ctx context.Context, params *UpgradeParams) (*daisy.Work
 		return upgradeWf, err
 	}
 	fmt.Print("\nRebooting...\n\n")
-	rebootWf, err := reboot(ctx, rebootVarMap, params)
+	rebootWf, err := reboot(ctx, rebootVarMap, u)
 	if err != nil {
 		return rebootWf, err
 	}
 
 	// step 4: retry upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err = upgrade(ctx, retryWorkflowPath, upgradeVarMap, params)
+	upgradeWf, err = upgrade(ctx, retryWorkflowPath, upgradeVarMap, u)
 	return upgradeWf, err
 }
