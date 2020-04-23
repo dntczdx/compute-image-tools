@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 )
@@ -52,22 +53,17 @@ func getUpgradeIntroduction(project, zone, instanceName, installMediaDiskName,
 	osDiskSnapshotName, oldOSDiskName, newOSDiskName, machineImageName string,
 	oldStartupScriptURLPtr *string, osDiskDeviceName string, osDiskAutoDelete bool) string {
 
-	oldStartupScriptURL := "None"
+	oldStartupScriptURL := "None."
 	if oldStartupScriptURLPtr != nil {
 		oldStartupScriptURL = *oldStartupScriptURLPtr
 	}
 	if machineImageName == "" {
-		machineImageName = "None"
+		machineImageName = "Not created. Machine Image backup is disabled."
 	}
 	return fmt.Sprintf(upgradeIntroductionTemplate, project, zone, instanceName,
 		installMediaDiskName, osDiskSnapshotName, oldOSDiskName, osDiskDeviceName,
 		osDiskAutoDelete, newOSDiskName, machineImageName, metadataKeyWindowsStartupScriptURL,
 		oldStartupScriptURL) + guideTemplate
-}
-
-func getResourceRealName(resourceURI string) string {
-	dm := strings.Split(resourceURI, "/")
-	return dm[len(dm)-1]
 }
 
 func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool {
@@ -85,7 +81,7 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 
 	// ignore project / zone, only compare real name, because it's guaranteed that
 	// old OS disk and new OS disk are in the same project and zone.
-	currentBootDiskName := getResourceRealName(currentBootDiskURL)
+	currentBootDiskName := daisyutils.GetResourceRealName(currentBootDiskURL)
 	return currentBootDiskName == newOSDiskName
 }
 

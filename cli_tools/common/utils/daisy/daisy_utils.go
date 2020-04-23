@@ -211,3 +211,31 @@ func RunWorkflowWithCancelSignal(ctx context.Context, w *daisy.Workflow) error {
 	}(w)
 	return w.Run(ctx)
 }
+
+// NewStep creates a new step for the workflow along with dependencies. It wraps 2 daisy.Workflow
+// functions together to reduce code lines and improve readabilities.
+func NewStep(w *daisy.Workflow, name string, dependencies ...*daisy.Step) (*daisy.Step, error) {
+	s, err := w.NewStep(name)
+	if err != nil {
+		return nil, err
+	}
+
+	err = w.AddDependency(s, dependencies...)
+	return s, err
+}
+
+// GetResourceRealName gets resource's real name from its URI.
+func GetResourceRealName(resourceURI string) string {
+	dm := strings.Split(resourceURI, "/")
+	return dm[len(dm)-1]
+}
+
+// GetDeviceURI gets a URI for a device based on its attributes
+func GetDeviceURI(project, zone, name string) string {
+	return fmt.Sprintf("projects/%v/zones/%v/devices/%v", project, zone, name)
+}
+
+// GetDiskURI gets a URI for a disk based on its attributes
+func GetDiskURI(project, zone, name string) string {
+	return fmt.Sprintf("projects/%v/zones/%v/disks/%v", project, zone, name)
+}

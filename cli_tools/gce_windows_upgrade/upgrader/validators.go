@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/validation"
@@ -117,14 +118,14 @@ func validateInstance(derivedVars *derivedVars, sourceOS string) error {
 
 func validateOSDisk(osDisk *compute.AttachedDisk, derivedVars *derivedVars) error {
 	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.zone, "disks", osDisk.Source)
-	osDiskName := getResourceRealName(osDisk.Source)
+	osDiskName := daisyutils.GetResourceRealName(osDisk.Source)
 	d, err := computeClient.GetDisk(derivedVars.project, derivedVars.zone, osDiskName)
 	if err != nil {
 		return daisy.Errf("Failed to get OS disk info: %v", err)
 	}
 	derivedVars.osDiskDeviceName = osDisk.DeviceName
 	derivedVars.osDiskAutoDelete = osDisk.AutoDelete
-	derivedVars.osDiskType = getResourceRealName(d.Type)
+	derivedVars.osDiskType = daisyutils.GetResourceRealName(d.Type)
 	return nil
 }
 
@@ -145,7 +146,7 @@ func validateLicense(inst *compute.Instance, sourceOS string) error {
 		return daisy.Errf(fmt.Sprintf("Can only upgrade GCE instance with %v license attached", expectedCurrentLicense[sourceOS]))
 	}
 	if upgraded {
-		return daisy.Errf(fmt.Sprintf("The GCE instance is with %v license attached, which means it either has been upgraded or has started a upgrade in the past.", licenseToAdd[sourceOS]))
+		return daisy.Errf(fmt.Sprintf("The GCE instance is with %v license attached, which means it either has been upgraded or has started an upgrade in the past.", licenseToAdd[sourceOS]))
 	}
 	return nil
 }

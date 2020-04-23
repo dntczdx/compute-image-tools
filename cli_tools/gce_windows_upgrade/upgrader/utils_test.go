@@ -1,4 +1,4 @@
-//  Copyright 2019 Google Inc. All Rights Reserved.
+//  Copyright 2020 Google Inc. All Rights Reserved.
 //
 //  Licensed under the Apache License, Version 2.0 (the "License");
 //  you may not use this file except in compliance with the License.
@@ -17,29 +17,6 @@ package upgrader
 import (
 	"testing"
 )
-
-func TestGetResourceRealName(t *testing.T) {
-	initTest()
-
-	type testCase struct {
-		testName         string
-		resourceName     string
-		expectedRealName string
-	}
-
-	tcs := []testCase{
-		{"simple resource name", "resname", "resname"},
-		{"URI", "path/resname", "resname"},
-		{"longer URI", "https://resource/path/resname", "resname"},
-	}
-
-	for _, tc := range tcs {
-		realName := getResourceRealName(tc.resourceName)
-		if realName != tc.expectedRealName {
-			t.Errorf("[%v]: Expected real name '%v' != actrual real name '%v'", tc.testName, tc.expectedRealName, realName)
-		}
-	}
-}
 
 func TestIsNewOSDiskAttached(t *testing.T) {
 	initTest()
