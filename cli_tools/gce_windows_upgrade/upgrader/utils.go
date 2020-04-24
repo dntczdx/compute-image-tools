@@ -97,11 +97,14 @@ func getUpgradeGuide(project, zone, instanceName, installMediaDiskName,
 		machineImageName = "Not created. Machine Image backup is disabled."
 	}
 
-	t := template.Must(template.New("guide").Parse(upgradeIntroductionTemplate))
+	t, err := template.New("guide").Option("missingkey=error").Parse(upgradeIntroductionTemplate)
+	if err != nil {
+		return "", daisy.Errf("Failed to parse upgrade guide.")
+	}
 	var buf bytes.Buffer
 	varMap := map[string]interface{}{
-		"Project":                  project,
-		"Zone":                     zone,
+		"project":                  project,
+		"zone":                     zone,
 		"instanceName":             instanceName,
 		"installMediaDiskName":     installMediaDiskName,
 		"osDiskSnapshotName":       osDiskSnapshotName,

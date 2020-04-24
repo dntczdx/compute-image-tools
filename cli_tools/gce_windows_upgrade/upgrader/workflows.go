@@ -210,7 +210,7 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 	w.Steps = map[string]*daisy.Step{
 		"start-instance": {
 			StartInstances: &daisy.StartInstances{
-				Instances: []string{"${instance}"},
+				Instances: []string{u.InstanceURI},
 			},
 		},
 		"wait-for-boot": {
