@@ -16,6 +16,7 @@ package upgrader
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
@@ -23,7 +24,19 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/validation"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
+	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	"google.golang.org/api/compute/v1"
+)
+
+const (
+	rfc1035       = "[a-z]([-a-z0-9]*[a-z0-9])?"
+	projectRgxStr = "[a-z]([-.:a-z0-9]*[a-z0-9])?"
+)
+
+var (
+	instanceURLRgx = regexp.MustCompile(fmt.Sprintf(`^(projects/(?P<project>%[1]s)/)?zones/(?P<zone>%[2]s)/instances/(?P<instance>%[2]s)$`, projectRgxStr, rfc1035))
+
+	computeClient daisyCompute.Client
 )
 
 func (u *Upgrader) validateParams() error {

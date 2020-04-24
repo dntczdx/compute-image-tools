@@ -15,12 +15,48 @@
 package upgrader
 
 import (
-	"fmt"
+	"bytes"
 	"strings"
+	"text/template"
 
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
+)
+
+const (
+	upgradeIntroductionTemplate = "The following resources will be created/accessed during the upgrade. " +
+		"Please keep track of their names if manual cleanup and/or rollback are necessary.\n" +
+		"All resources are in project '{{.project}}', zone '{{.zone}}'.\n" +
+		"1. Instance: {{.instanceName}}\n" +
+		"2. Disk for install media: {{.installMediaDiskName}}\n" +
+		"3. Snapshot for original OS disk: {{.osDiskSnapshotName}}\n" +
+		"4. Original OS disk: {{.osDiskName}}\n" +
+		"   - Device name of the attachment: {{.osDiskDeviceName}}\n" +
+		"   - AutoDelete of the attachment: {{.osDiskAutoDelete}}\n" +
+		"5. New OS disk: {{.newOSDiskName}}\n" +
+		"6. Machine image: {{.machineImageName}}\n" +
+		"7. Original startup script url: {{.originalStartupScriptURL}}\n" +
+		"\n" +
+		"When upgrading succeeded but cleanup failed, please manually cleanup by following steps:\n" +
+		"1. Delete 'windows-startup-script-url' from the instance's metadata if there isn't an original value. " +
+		"If there is an original value, restore it. The original value is backed up as metadata 'windows-startup-script-url-backup'.\n" +
+		"2. Detach the install media disk from the instance and delete it.\n" +
+		"\n" +
+		"When upgrading failed but you didn't enable auto-rollback, or auto-rollback failed, or " +
+		"upgrading succeeded but you still need to rollback for any reason, " +
+		"please manually rollback by following steps:\n" +
+		"1. Detach the new OS disk from the instance and delete it.\n" +
+		"2. Attach the old OS disk as boot disk.\n" +
+		"3. Detach the install media disk from the instance and delete it.\n" +
+		"4. Delete 'windows-startup-script-url' from the instance's metadata if there isn't an original value. " +
+		"If there is an original value, restore it. The original value is backed up as metadata 'windows-startup-script-url-backup'.\n" +
+		"\n" +
+		"Once you verified the upgrading succeeded and decided to never rollback, you can:\n" +
+		"1. Delete the original OS disk.\n" +
+		"2. Delete the machine image.\n" +
+		"3. Delete the snapshot.\n" +
+		"\n"
 )
 
 func reverseMap(m map[string]string) map[string]string {
@@ -49,21 +85,37 @@ func SupportedTargetOSVersions() []string {
 	return getKeys(supportedTargetOSVersions)
 }
 
-func getUpgradeIntroduction(project, zone, instanceName, installMediaDiskName,
+func getUpgradeGuide(project, zone, instanceName, installMediaDiskName,
 	osDiskSnapshotName, oldOSDiskName, newOSDiskName, machineImageName string,
-	oldStartupScriptURLPtr *string, osDiskDeviceName string, osDiskAutoDelete bool) string {
+	originalStartupScriptURLPtr *string, osDiskDeviceName string, osDiskAutoDelete bool) (string, error) {
 
-	oldStartupScriptURL := "None."
-	if oldStartupScriptURLPtr != nil {
-		oldStartupScriptURL = *oldStartupScriptURLPtr
+	originalStartupScriptURL := "None."
+	if originalStartupScriptURLPtr != nil {
+		originalStartupScriptURL = *originalStartupScriptURLPtr
 	}
 	if machineImageName == "" {
 		machineImageName = "Not created. Machine Image backup is disabled."
 	}
-	return fmt.Sprintf(upgradeIntroductionTemplate, project, zone, instanceName,
-		installMediaDiskName, osDiskSnapshotName, oldOSDiskName, osDiskDeviceName,
-		osDiskAutoDelete, newOSDiskName, machineImageName, metadataKeyWindowsStartupScriptURL,
-		oldStartupScriptURL) + guideTemplate
+
+	t := template.Must(template.New("guide").Parse(upgradeIntroductionTemplate))
+	var buf bytes.Buffer
+	varMap := map[string]interface{}{
+		"Project":                  project,
+		"Zone":                     zone,
+		"instanceName":             instanceName,
+		"installMediaDiskName":     installMediaDiskName,
+		"osDiskSnapshotName":       osDiskSnapshotName,
+		"osDiskName":               oldOSDiskName,
+		"osDiskDeviceName":         osDiskDeviceName,
+		"osDiskAutoDelete":         osDiskAutoDelete,
+		"newOSDiskName":            newOSDiskName,
+		"machineImageName":         machineImageName,
+		"originalStartupScriptURL": originalStartupScriptURL,
+	}
+	if err := t.Execute(&buf, varMap); err != nil {
+		return "", daisy.Errf("Failed to generate upgrade guide.")
+	}
+	return string(buf.Bytes()), nil
 }
 
 func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool {
@@ -83,25 +135,6 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 	// old OS disk and new OS disk are in the same project and zone.
 	currentBootDiskName := daisyutils.GetResourceRealName(currentBootDiskURL)
 	return currentBootDiskName == newOSDiskName
-}
-
-func buildDaisyVarsForUpgrade(project string, zone string, instance string, installMedia string) map[string]string {
-	varMap := map[string]string{}
-
-	varMap["project"] = project
-	varMap["zone"] = zone
-	varMap["instance"] = instance
-	varMap["install_media"] = installMedia
-
-	return varMap
-}
-
-func buildDaisyVarsForReboot(instance string) map[string]string {
-	varMap := map[string]string{}
-
-	varMap["instance"] = instance
-
-	return varMap
 }
 
 func needReboot(err error) bool {
