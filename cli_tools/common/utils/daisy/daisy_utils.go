@@ -239,3 +239,8 @@ func GetDeviceURI(project, zone, name string) string {
 func GetDiskURI(project, zone, name string) string {
 	return fmt.Sprintf("projects/%v/zones/%v/disks/%v", project, zone, name)
 }
+
+// GetInstanceURI gets a URI for a instance based on its attributes
+func GetInstanceURI(project, zone, name string) string {
+	return fmt.Sprintf("projects/%v/zones/%v/instances/%v", project, zone, name)
+}

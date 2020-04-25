@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"log"
 
-	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	"google.golang.org/api/option"
@@ -33,8 +32,6 @@ const (
 
 const (
 	logPrefix           = "[windows-upgrade]"
-	rebootWorkflowPath  = "daisy_workflows/windows_upgrade/reboot.wf.json"
-	cleanupWorkflowPath = "daisy_workflows/windows_upgrade/cleanup.wf.json"
 
 	metadataKeyWindowsStartupScriptURL       = "windows-startup-script-url"
 	metadataKeyWindowsStartupScriptURLBackup = "windows-startup-script-url-backup"
@@ -92,6 +89,8 @@ type Upgrader struct {
 	CurrentExecutablePath  string
 
 	*derivedVars
+
+	ctx context.Context
 }
 
 // Run runs upgrade workflow.
@@ -99,8 +98,8 @@ func (u *Upgrader) Run() (*daisy.Workflow, error) {
 	log.SetPrefix(logPrefix + " ")
 
 	var err error
-	ctx := context.Background()
-	computeClient, err = daisyCompute.NewClient(ctx, option.WithCredentialsFile(u.Oauth))
+	u.ctx = context.Background()
+	computeClient, err = daisyCompute.NewClient(u.ctx, option.WithCredentialsFile(u.Oauth))
 	if err != nil {
 		return nil, daisy.Errf("Failed to create GCE client: %v", err)
 	}
@@ -110,20 +109,18 @@ func (u *Upgrader) Run() (*daisy.Workflow, error) {
 		return nil, err
 	}
 
-	return u.runUpgradeWorkflow(ctx)
+	return u.runUpgradeWorkflow()
 }
 
-func (u *Upgrader) runUpgradeWorkflow(ctx context.Context) (*daisy.Workflow, error) {
+func (u *Upgrader) runUpgradeWorkflow() (*daisy.Workflow, error) {
 	var err error
 
 	// If upgrade failed, run cleanup or rollback before exiting.
 	defer func() {
-		u.handleFailure(ctx, err)
+		u.handleFailure(err)
 	}()
 
-	guide, err := getUpgradeGuide(u.project, u.zone, daisyutils.GetResourceRealName(u.InstanceURI),
-		u.installMediaDiskName, u.osDiskSnapshotName, daisyutils.GetResourceRealName(u.osDiskURI), u.newOSDiskName,
-		u.machineImageBackupName, u.windowsStartupScriptURLBackup, u.osDiskDeviceName, u.osDiskAutoDelete)
+	guide, err := getUpgradeGuide(u)
 	if err != nil {
 		return nil, err
 	}
@@ -131,14 +128,14 @@ func (u *Upgrader) runUpgradeWorkflow(ctx context.Context) (*daisy.Workflow, err
 
 	// step 1: preparation - take snapshot, attach install media, backup/set startup script
 	fmt.Print("\nPreparing for upgrade...\n\n")
-	prepareWf, err := u.prepare(ctx)
+	prepareWf, err := u.prepare()
 	if err != nil {
 		return prepareWf, err
 	}
 
 	// step 2: run upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err := u.upgrade(ctx)
+	upgradeWf, err := u.upgrade()
 	if err == nil {
 		return upgradeWf, nil
 	}
@@ -148,18 +145,18 @@ func (u *Upgrader) runUpgradeWorkflow(ctx context.Context) (*daisy.Workflow, err
 		return upgradeWf, err
 	}
 	fmt.Print("\nRebooting...\n\n")
-	rebootWf, err := u.reboot(ctx)
+	rebootWf, err := u.reboot()
 	if err != nil {
 		return rebootWf, err
 	}
 
 	// step 4: retry upgrade.
 	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err = u.upgrade(ctx)
+	upgradeWf, err = u.upgrade()
 	return upgradeWf, err
 }
 
-func (u *Upgrader) handleFailure(ctx context.Context, err error) {
+func (u *Upgrader) handleFailure(err error) {
 	if err == nil {
 		fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", u.InstanceURI, u.TargetOS)
 		// TODO: update the help guide link. b/154838004
@@ -174,7 +171,7 @@ func (u *Upgrader) handleFailure(ctx context.Context, err error) {
 		if isNewOSDiskAttached {
 			fmt.Printf("\nFailed to finish upgrading. Rollback to the "+
 				"original state from the original OS disk '%v'...\n\n", u.osDiskURI)
-			_, err := u.rollback(ctx)
+			_, err := u.rollback()
 			if err != nil {
 				fmt.Printf("\nFailed to rollback. Error: %v\n"+
 					"Please manually rollback following the guide.\n\n", err)
@@ -195,7 +192,7 @@ func (u *Upgrader) handleFailure(ctx context.Context, err error) {
 			"rollback following the guide.\n\n")
 	}
 	fmt.Print("\nCleaning up temporary resources...\n\n")
-	if _, err := u.cleanup(ctx); err != nil {
+	if _, err := u.cleanup(); err != nil {
 		fmt.Printf("\nFailed to cleanup temporary resources: %v\n"+
 			"Please follow the guide to manually cleanup.\n\n", err)
 	}

@@ -15,11 +15,13 @@
 package upgrader
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	"google.golang.org/api/compute/v1"
 	"google.golang.org/api/googleapi"
@@ -29,39 +31,56 @@ import (
 const DNE = "DNE!"
 
 var (
-	testWf                 = "test-wf"
-	testProject            = "test-project"
-	testZone               = "test-zone"
-	testRegion             = "test-zo"
-	testDisk               = "test-disk"
-	testDiskURI            = fmt.Sprintf("projects/%v/zones/%v/disks/%v", testProject, testZone, testDisk)
-	testForwardingRule     = "test-forwarding-rule"
-	testFirewallRule       = "test-firewall-rule"
-	testImage              = "test-image"
-	testMachineImage       = "test-machine-image"
-	testSnapshot           = "test-snapshot"
-	testInstance           = "test-instance"
-	testInstanceNoDisk     = "test-instance-no-disk"
-	testInstanceNoBootDisk = "test-instance-no-disk"
-	testMachineType        = "test-machine-type"
-	testLicense            = "test-license"
-	testNetwork            = "test-network"
-	testSubnetwork         = "test-subnetwork"
-	testTargetInstance     = "test-target-instance"
-	testFamily             = "test-family"
-	testGCSPath            = "gs://test-bucket"
-	testGCSObjs            []string
-	testGCSObjsMx          = sync.Mutex{}
+	testWf                        = "test-wf"
+	testProject                   = "test-project"
+	testZone                      = "test-zone"
+	testRegion                    = "test-zo"
+	testDisk                      = "test-disk"
+	testDiskURI                   = daisy.GetDiskURI(testProject, testZone, testDisk)
+	testForwardingRule            = "test-forwarding-rule"
+	testFirewallRule              = "test-firewall-rule"
+	testImage                     = "test-image"
+	testMachineImage              = "test-machine-image"
+	testSnapshot                  = "test-snapshot"
+	testInstance                  = "test-instance"
+	testInstanceNoDisk            = "test-instance-no-disk"
+	testInstanceNoBootDisk        = "test-instance-no-disk"
+	testInstanceWithStartupScript = "test-instance-with-startup-script"
+	testMachineType               = "test-machine-type"
+	testLicense                   = "test-license"
+	testNetwork                   = "test-network"
+	testSubnetwork                = "test-subnetwork"
+	testTargetInstance            = "test-target-instance"
+	testFamily                    = "test-family"
+	testGCSPath                   = "gs://test-bucket"
+	testGCSObjs                   []string
+	testGCSObjsMx                 = sync.Mutex{}
+	testSourceOS                  = versionWindows2008r2
+	testTargetOS                  = versionWindows2012r2
+	testOriginalStartupScript     = "original"
 )
 
-func initTest() {
+func initTest() *Upgrader {
 	computeClient = newTestGCEClient()
-}
+	return &Upgrader{
+		ClientID:               "test",
+		InstanceURI:            daisy.GetInstanceURI(testProject, testZone, testInstance),
+		SkipMachineImageBackup: false,
+		AutoRollback:           false,
+		SourceOS:               "windows-2008r2",
+		TargetOS:               "windows-2012r2",
+		ProjectPtr:             new(string),
+		Timeout:                "60m",
+		ScratchBucketGcsPath:   "",
+		Oauth:                  "",
+		Ce:                     "",
+		GcsLogsDisabled:        false,
+		CloudLogsDisabled:      false,
+		StdoutLogsDisabled:     false,
+		CurrentExecutablePath:  ".",
 
-func addGCSObj(o string) {
-	testGCSObjsMx.Lock()
-	defer testGCSObjsMx.Unlock()
-	testGCSObjs = append(testGCSObjs, o)
+		ctx: context.Background(),
+	}
 }
 
 func newTestGCEClient() *daisyCompute.TestClient {
@@ -85,7 +104,33 @@ func newTestGCEClient() *daisyCompute.TestClient {
 		if name == testInstanceNoBootDisk {
 			return &compute.Instance{Disks: []*compute.AttachedDisk{{DeviceName: testDisk, Source: testDiskURI, Boot: false}}}, nil
 		}
-		return &compute.Instance{Disks: []*compute.AttachedDisk{{DeviceName: testDisk, Source: testDiskURI, Boot: true}}}, nil
+		if name == testInstanceWithStartupScript {
+			return &compute.Instance{Disks: []*compute.AttachedDisk{{
+				DeviceName: testDisk,
+				Source:     testDiskURI,
+				Boot:       true,
+				Licenses: []string{
+					expectedCurrentLicense[testSourceOS],
+				},
+			}},
+				Metadata: &compute.Metadata{
+					Items: []*compute.MetadataItems {
+						{
+							Key: metadataKeyWindowsStartupScriptURL,
+							Value: &testOriginalStartupScript,
+						},
+					},
+				},
+			}, nil
+		}
+		return &compute.Instance{Disks: []*compute.AttachedDisk{{
+			DeviceName: testDisk,
+			Source:     testDiskURI,
+			Boot:       true,
+			Licenses: []string{
+				expectedCurrentLicense[testSourceOS],
+			},
+		}}}, nil
 	}
 
 	return c

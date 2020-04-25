@@ -113,11 +113,13 @@ func validateInstance(derivedVars *derivedVars, sourceOS string) error {
 		return err
 	}
 
-	for _, metadataItem := range inst.Metadata.Items {
-		if metadataItem.Key == metadataKeyWindowsStartupScriptURL {
-			derivedVars.windowsStartupScriptURLBackup = metadataItem.Value
-		} else if metadataItem.Key == metadataKeyWindowsStartupScriptURLBackup {
-			derivedVars.windowsStartupScriptURLBackupExists = true
+	if inst.Metadata != nil && inst.Metadata.Items != nil {
+		for _, metadataItem := range inst.Metadata.Items {
+			if metadataItem.Key == metadataKeyWindowsStartupScriptURL {
+				derivedVars.windowsStartupScriptURLBackup = metadataItem.Value
+			} else if metadataItem.Key == metadataKeyWindowsStartupScriptURLBackup {
+				derivedVars.windowsStartupScriptURLBackupExists = true
+			}
 		}
 	}
 	// If script url backup exists, don't backup again to avoid overwriting

@@ -5,11 +5,10 @@ go 1.13
 require (
 	cloud.google.com/go v0.56.0
 	cloud.google.com/go/storage v1.6.0
-	github.com/GoogleCloudPlatform/compute-image-tools/daisy v0.0.0-20200423213259-5f97078344b1
+	github.com/GoogleCloudPlatform/compute-image-tools/daisy v0.0.0-20200424162840-1501f2532b6f
 	github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils v0.0.0-20200128181915-c0775e429077 // indirect
 	github.com/GoogleCloudPlatform/compute-image-tools/mocks v0.0.0-20200414213327-359251a2c860
 	github.com/GoogleCloudPlatform/osconfig v0.0.0-20200421180747-0934e956899b
-	github.com/GoogleCloudPlatform/osconfig/e2e_tests v0.0.0-20200128231920-2ddeb2407498 // indirect
 	github.com/dustin/go-humanize v1.0.0
 	github.com/go-ole/go-ole v1.2.4
 	github.com/golang/mock v1.4.3
@@ -29,6 +28,6 @@ require (
 	golang.org/x/tools v0.0.0-20200423205358-59e73619c742 // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/genproto v0.0.0-20200423170343-7949de9c1215 // indirect
+	google.golang.org/genproto v0.0.0-20200424135956-bca184e23272 // indirect
 	google.golang.org/grpc v1.29.1 // indirect
 )

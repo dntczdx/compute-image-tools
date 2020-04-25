@@ -333,3 +333,11 @@ func TestGetDiskURI(t *testing.T) {
 		t.Errorf("URI '%v' doesn't match expected '%v'", uri, expectedURI)
 	}
 }
+
+func TestGetInstanceURI(t *testing.T) {
+	uri := GetDiskURI("p", "z", "i")
+	expectedURI := "projects/p/zones/z/instances/i"
+	if uri != expectedURI {
+		t.Errorf("URI '%v' doesn't match expected '%v'", uri, expectedURI)
+	}
+}

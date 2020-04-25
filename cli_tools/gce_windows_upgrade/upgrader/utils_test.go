@@ -45,3 +45,28 @@ func TestIsNewOSDiskAttached(t *testing.T) {
 		}
 	}
 }
+
+func TestGetUpgradeGuide(t *testing.T) {
+	type testCase struct {
+		name string
+		scriptURLPtr *string
+	}
+
+	testURL := "url"
+	tcs := []testCase{
+		{"has no script url", nil},
+		{"has a script url", &testURL},
+	}
+
+	for _, tc := range tcs {
+		u := Upgrader{
+			derivedVars:            &derivedVars{
+				windowsStartupScriptURLBackup: tc.scriptURLPtr,
+			},
+		}
+		_, err := getUpgradeGuide(&u)
+		if err != nil {
+			t.Errorf("[%v]: Unexpected error: '%v'", tc.name, err)
+		}
+	}
+}

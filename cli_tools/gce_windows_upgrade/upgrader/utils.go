@@ -77,7 +77,7 @@ func getKeys(m map[string]string) []string {
 
 // SupportedSourceOSVersions returns supported source versions of upgrading
 func SupportedSourceOSVersions() []string {
-	return getKeys(supportedSourceOSVersions)
+	return getKeys(supportedTargetOSVersions)
 }
 
 // SupportedTargetOSVersions returns supported target versions of upgrading
@@ -85,16 +85,13 @@ func SupportedTargetOSVersions() []string {
 	return getKeys(supportedTargetOSVersions)
 }
 
-func getUpgradeGuide(project, zone, instanceName, installMediaDiskName,
-	osDiskSnapshotName, oldOSDiskName, newOSDiskName, machineImageName string,
-	originalStartupScriptURLPtr *string, osDiskDeviceName string, osDiskAutoDelete bool) (string, error) {
-
+func getUpgradeGuide(u *Upgrader) (string, error) {
 	originalStartupScriptURL := "None."
-	if originalStartupScriptURLPtr != nil {
-		originalStartupScriptURL = *originalStartupScriptURLPtr
+	if u.windowsStartupScriptURLBackup != nil {
+		originalStartupScriptURL = *u.windowsStartupScriptURLBackup
 	}
-	if machineImageName == "" {
-		machineImageName = "Not created. Machine Image backup is disabled."
+	if u.machineImageBackupName == "" {
+		u.machineImageBackupName = "Not created. Machine Image backup is disabled."
 	}
 
 	t, err := template.New("guide").Option("missingkey=error").Parse(upgradeIntroductionTemplate)
@@ -103,16 +100,16 @@ func getUpgradeGuide(project, zone, instanceName, installMediaDiskName,
 	}
 	var buf bytes.Buffer
 	varMap := map[string]interface{}{
-		"project":                  project,
-		"zone":                     zone,
-		"instanceName":             instanceName,
-		"installMediaDiskName":     installMediaDiskName,
-		"osDiskSnapshotName":       osDiskSnapshotName,
-		"osDiskName":               oldOSDiskName,
-		"osDiskDeviceName":         osDiskDeviceName,
-		"osDiskAutoDelete":         osDiskAutoDelete,
-		"newOSDiskName":            newOSDiskName,
-		"machineImageName":         machineImageName,
+		"project":                  u.project,
+		"zone":                     u.zone,
+		"instanceName":             u.instanceName,
+		"installMediaDiskName":     u.installMediaDiskName,
+		"osDiskSnapshotName":       u.osDiskSnapshotName,
+		"osDiskName":               daisyutils.GetResourceRealName(u.osDiskURI),
+		"osDiskDeviceName":         u.osDiskDeviceName,
+		"osDiskAutoDelete":         u.osDiskAutoDelete,
+		"newOSDiskName":            u.newOSDiskName,
+		"machineImageName":         u.machineImageBackupName,
 		"originalStartupScriptURL": originalStartupScriptURL,
 	}
 	if err := t.Execute(&buf, varMap); err != nil {
