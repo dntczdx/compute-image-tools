@@ -31,7 +31,7 @@ const (
 )
 
 const (
-	logPrefix           = "[windows-upgrade]"
+	logPrefix = "[windows-upgrade]"
 
 	metadataKeyWindowsStartupScriptURL       = "windows-startup-script-url"
 	metadataKeyWindowsStartupScriptURLBackup = "windows-startup-script-url-backup"

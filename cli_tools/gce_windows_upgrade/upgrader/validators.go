@@ -47,44 +47,18 @@ func (u *Upgrader) validateParams() error {
 	if err := validation.ValidateStringFlagNotEmpty(u.ClientID, ClientIDFlagKey); err != nil {
 		return err
 	}
-
-	if u.SourceOS == "" {
-		return daisy.Errf("Flag -source-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedSourceOSVersions(), ", "))
+	if err := validateOSVersion(u.SourceOS, u.TargetOS); err != nil {
+		return err
 	}
-	if _, ok := supportedSourceOSVersions[u.SourceOS]; !ok {
-		return daisy.Errf("Flag -source-os value '%v' unsupported. Please choose a supported version from {%v}.", u.SourceOS, strings.Join(SupportedSourceOSVersions(), ", "))
+	if err := validateInstanceURI(u.InstanceURI, u.derivedVars); err != nil {
+		return err
 	}
-	if u.TargetOS == "" {
-		return daisy.Errf("Flag -target-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedTargetOSVersions(), ", "))
-	}
-	if _, ok := supportedTargetOSVersions[u.TargetOS]; !ok {
-		return daisy.Errf("Flag -target-os value '%v' unsupported. Please choose a supported version from {%v}.", u.TargetOS, strings.Join(SupportedTargetOSVersions(), ", "))
-	}
-
-	// We may chain several upgrades together in the future (for example, 2008r2->2012r2->2016).
-	// For now, we only support 1-step upgrade.
-	if expectedTo, _ := supportedSourceOSVersions[u.SourceOS]; expectedTo != u.TargetOS {
-		return daisy.Errf("Can't upgrade from %v to %v. Can only upgrade to %v.", u.SourceOS, u.TargetOS, expectedTo)
-	}
-
-	if u.InstanceURI == "" {
-		return daisy.Errf("Flag -instance must be provided")
-	}
-	m := daisy.NamedSubexp(instanceURLRgx, u.InstanceURI)
-	if m == nil {
-		return daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", u.InstanceURI)
+	if err := validateInstance(u.derivedVars, u.SourceOS); err != nil {
+		return err
 	}
 
 	if u.Timeout == "" {
 		u.Timeout = DefaultTimeout
-	}
-
-	u.project = m["project"]
-	u.zone = m["zone"]
-	u.instanceName = m["instance"]
-
-	if err := validateInstance(u.derivedVars, u.SourceOS); err != nil {
-		return err
 	}
 
 	// Prepare resource names with a random suffix
@@ -100,16 +74,54 @@ func (u *Upgrader) validateParams() error {
 	return nil
 }
 
+func validateOSVersion(sourceOS, targetOS string) error {
+	if sourceOS == "" {
+		return daisy.Errf("Flag -source-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedSourceOSVersions(), ", "))
+	}
+	if _, ok := supportedSourceOSVersions[sourceOS]; !ok {
+		return daisy.Errf("Flag -source-os value '%v' unsupported. Please choose a supported version from {%v}.", sourceOS, strings.Join(SupportedSourceOSVersions(), ", "))
+	}
+	if targetOS == "" {
+		return daisy.Errf("Flag -target-os must be provided. Please choose a supported version from {%v}.", strings.Join(SupportedTargetOSVersions(), ", "))
+	}
+	if _, ok := supportedTargetOSVersions[targetOS]; !ok {
+		return daisy.Errf("Flag -target-os value '%v' unsupported. Please choose a supported version from {%v}.", targetOS, strings.Join(SupportedTargetOSVersions(), ", "))
+	}
+	// We may chain several upgrades together in the future (for example, 2008r2->2012r2->2016->2019).
+	// For now, we only support one-step upgrade.
+	if expectedTargetOS, _ := supportedSourceOSVersions[sourceOS]; expectedTargetOS != targetOS {
+		return daisy.Errf("Can't upgrade from %v to %v. Can only upgrade to %v.", sourceOS, targetOS, expectedTargetOS)
+	}
+	return nil
+}
+
+func validateInstanceURI(instanceURI string, derivedVars *derivedVars) error {
+	if instanceURI == "" {
+		return daisy.Errf("Flag -instance must be provided")
+	}
+	m := daisy.NamedSubexp(instanceURLRgx, instanceURI)
+	if m == nil {
+		return daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", instanceURI)
+	}
+	derivedVars.project = m["project"]
+	derivedVars.zone = m["zone"]
+	derivedVars.instanceName = m["instance"]
+	return nil
+}
+
 func validateInstance(derivedVars *derivedVars, sourceOS string) error {
 	inst, err := computeClient.GetInstance(derivedVars.project, derivedVars.zone, derivedVars.instanceName)
 	if err != nil {
 		return daisy.Errf("Failed to get instance: %v", err)
 	}
-	if err := validateLicense(inst, sourceOS); err != nil {
+
+	if len(inst.Disks) == 0 {
+		return daisy.Errf("No disks attached to the instance.")
+	}
+	if err := validateOSDisk(inst.Disks[0], derivedVars); err != nil {
 		return err
 	}
-
-	if err := validateOSDisk(inst.Disks[0], derivedVars); err != nil {
+	if err := validateLicense(inst.Disks[0], sourceOS); err != nil {
 		return err
 	}
 
@@ -132,25 +144,26 @@ func validateInstance(derivedVars *derivedVars, sourceOS string) error {
 }
 
 func validateOSDisk(osDisk *compute.AttachedDisk, derivedVars *derivedVars) error {
-	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.zone, "disks", osDisk.Source)
+	if osDisk.Boot == false {
+		return daisy.Errf("The instance has no boot disk.")
+	}
 	osDiskName := daisyutils.GetResourceRealName(osDisk.Source)
 	d, err := computeClient.GetDisk(derivedVars.project, derivedVars.zone, osDiskName)
 	if err != nil {
 		return daisy.Errf("Failed to get OS disk info: %v", err)
 	}
+
+	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.zone, "disks", osDisk.Source)
 	derivedVars.osDiskDeviceName = osDisk.DeviceName
 	derivedVars.osDiskAutoDelete = osDisk.AutoDelete
 	derivedVars.osDiskType = daisyutils.GetResourceRealName(d.Type)
 	return nil
 }
 
-func validateLicense(inst *compute.Instance, sourceOS string) error {
+func validateLicense(osDisk *compute.AttachedDisk, sourceOS string) error {
 	matchSourceOSVersion := false
 	upgraded := false
-	if len(inst.Disks) == 0 {
-		return daisy.Errf("No disks attached to the instance.")
-	}
-	for _, lic := range inst.Disks[0].Licenses {
+	for _, lic := range osDisk.Licenses {
 		if strings.HasSuffix(lic, expectedCurrentLicense[sourceOS]) {
 			matchSourceOSVersion = true
 		} else if strings.HasSuffix(lic, licenseToAdd[sourceOS]) {

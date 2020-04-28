@@ -48,7 +48,7 @@ func TestIsNewOSDiskAttached(t *testing.T) {
 
 func TestGetUpgradeGuide(t *testing.T) {
 	type testCase struct {
-		name string
+		name         string
 		scriptURLPtr *string
 	}
 
@@ -60,7 +60,7 @@ func TestGetUpgradeGuide(t *testing.T) {
 
 	for _, tc := range tcs {
 		u := Upgrader{
-			derivedVars:            &derivedVars{
+			derivedVars: &derivedVars{
 				windowsStartupScriptURLBackup: tc.scriptURLPtr,
 			},
 		}

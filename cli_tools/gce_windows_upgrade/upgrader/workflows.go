@@ -32,7 +32,7 @@ func (u *Upgrader) prepare() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("windows-upgrade-preparation", u.Timeout, populatePrepareSteps)
 }
 
-func populatePrepareSteps (u *Upgrader, w *daisy.Workflow) error {
+func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	w.Sources = map[string]string{"upgrade_script.ps1": fmt.Sprintf("./%v", upgradeScriptName[u.SourceOS])}
 
 	stepStopInstance, err := daisyutils.NewStep(w, "stop-instance")
@@ -312,7 +312,7 @@ func (u *Upgrader) reboot() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("reboot", "15m", populateRebootSteps)
 }
 
-func populateRebootSteps (u *Upgrader, w *daisy.Workflow) error {
+func populateRebootSteps(u *Upgrader, w *daisy.Workflow) error {
 	w.Steps = map[string]*daisy.Step{
 		"stop-instance": {
 			StopInstances: &daisy.StopInstances{
@@ -373,7 +373,7 @@ func (u *Upgrader) rollback() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("rollback", u.Timeout, populateRollbackSteps)
 }
 
-func populateRollbackSteps (u *Upgrader, w *daisy.Workflow) error {
+func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	stepStopInstance, err := daisyutils.NewStep(w, "stop-instance")
 	if err != nil {
 		return err

@@ -23,9 +23,9 @@ require (
 	github.com/vmware/govmomi v0.22.2
 	go.opencensus.io v0.22.3 // indirect
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5 // indirect
-	golang.org/x/net v0.0.0-20200421231249-e086a090c8fd // indirecresource_labeler_testt
-	golang.org/x/sys v0.0.0-20200420163511-1957bb5e6d1f
-	golang.org/x/tools v0.0.0-20200423205358-59e73619c742 // indirect
+	golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0 // indirecresource_labeler_testt
+	golang.org/x/sys v0.0.0-20200427175716-29b57079015a
+	golang.org/x/tools v0.0.0-20200428021058-7ae4988eb4d9 // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.6 // indirect
 	google.golang.org/genproto v0.0.0-20200424135956-bca184e23272 // indirect

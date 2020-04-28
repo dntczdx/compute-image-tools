@@ -42,6 +42,7 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 		err := u.validateParams()
 		if err != nil {
 			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			continue
 		}
 
 		w, err := u.generateWorkflowWithSteps("test", DefaultTimeout, tc.populateFunc)
@@ -69,10 +70,10 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 
 func TestGenerateStaticWorkflow(t *testing.T) {
 	type testCase struct {
-		testName         string
-		populateFunc 		 func(*Upgrader, *daisy.Workflow) error
-		instanceName		 string
-		expectError			 bool
+		testName     string
+		populateFunc func(*Upgrader, *daisy.Workflow) error
+		instanceName string
+		expectError  bool
 	}
 
 	tcs := []testCase{
@@ -102,6 +103,7 @@ func TestGenerateStaticWorkflow(t *testing.T) {
 		err := u.validateParams()
 		if err != nil {
 			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			continue
 		}
 
 		_, err = u.generateWorkflowWithSteps("test", DefaultTimeout, tc.populateFunc)
@@ -122,13 +124,13 @@ func TestRunWorkflowWithSteps(t *testing.T) {
 
 	tcs := []testCase{
 		{"populate without error", func(u *Upgrader, w *daisy.Workflow) error {
-			w.Steps = map[string]*daisy.Step {
+			w.Steps = map[string]*daisy.Step{
 				"step1": {},
 			}
 			return nil
 		}, false},
 		{"populate with error", func(u *Upgrader, w *daisy.Workflow) error {
-			w.Steps = map[string]*daisy.Step {
+			w.Steps = map[string]*daisy.Step{
 				"step1": {},
 			}
 			return daisy.Errf("some error")
@@ -140,6 +142,7 @@ func TestRunWorkflowWithSteps(t *testing.T) {
 		err := u.validateParams()
 		if err != nil {
 			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			continue
 		}
 
 		w, err := u.runWorkflowWithSteps("test", "10m", tc.populateFunc)
@@ -161,8 +164,8 @@ func TestRunAllWorkflowFunctions(t *testing.T) {
 	u := initTest()
 
 	type testCase struct {
-		testName                  string
-		workflowFunc              func() (*daisy.Workflow, error)
+		testName     string
+		workflowFunc func() (*daisy.Workflow, error)
 	}
 
 	tcs := []testCase{
@@ -178,6 +181,7 @@ func TestRunAllWorkflowFunctions(t *testing.T) {
 		err := u.validateParams()
 		if err != nil {
 			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			continue
 		}
 
 		w, err := tc.workflowFunc()
