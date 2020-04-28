@@ -65,7 +65,7 @@ func upgradeEntry() (*daisy.Workflow, error) {
 		CurrentExecutablePath:  currentExecutablePath,
 	}
 
-	return u.Run()
+	return upgrader.Run(u)
 }
 
 func main() {

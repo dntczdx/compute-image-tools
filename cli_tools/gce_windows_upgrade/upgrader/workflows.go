@@ -260,7 +260,7 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 }
 
 func (u *Upgrader) retryUpgrade() (*daisy.Workflow, error) {
-	return u.runWorkflowWithSteps("upgrade", u.Timeout, retryUpgradeSteps[u.SourceOS])
+	return u.runWorkflowWithSteps("retry-upgrade", u.Timeout, retryUpgradeSteps[u.SourceOS])
 }
 
 func populateRetryUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) error {

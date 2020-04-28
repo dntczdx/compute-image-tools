@@ -93,38 +93,65 @@ type Upgrader struct {
 	ctx context.Context
 }
 
+type upgraderInterface interface {
+	getUpgrader() *Upgrader
+	init() error
+	validateParams() error
+	printUpgradeGuide() error
+	prepare() (*daisy.Workflow, error)
+	upgrade() (*daisy.Workflow, error)
+	retryUpgrade() (*daisy.Workflow, error)
+	reboot() (*daisy.Workflow, error)
+	cleanup() (*daisy.Workflow, error)
+	rollback() (*daisy.Workflow, error)
+}
+
 // Run runs upgrade workflow.
-func (u *Upgrader) Run() (*daisy.Workflow, error) {
+func Run(u upgraderInterface) (*daisy.Workflow, error) {
+	if err := u.init(); err != nil {
+		return nil, err
+	}
+	if err := u.validateParams(); err != nil {
+		return nil, err
+	}
+	if err := u.printUpgradeGuide(); err != nil {
+		return nil, err
+	}
+	return runUpgradeWorkflow(u)
+}
+
+func (u *Upgrader) getUpgrader() *Upgrader {
+	return u
+}
+
+func (u *Upgrader) init() error {
 	log.SetPrefix(logPrefix + " ")
 
 	var err error
 	u.ctx = context.Background()
 	computeClient, err = daisyCompute.NewClient(u.ctx, option.WithCredentialsFile(u.Oauth))
 	if err != nil {
-		return nil, daisy.Errf("Failed to create GCE client: %v", err)
+		return daisy.Errf("Failed to create GCE client: %v", err)
 	}
-
-	err = u.validateParams()
-	if err != nil {
-		return nil, err
-	}
-
-	return u.runUpgradeWorkflow()
+	return nil
 }
 
-func (u *Upgrader) runUpgradeWorkflow() (*daisy.Workflow, error) {
+func (u *Upgrader) printUpgradeGuide() error {
+	guide, err := getUpgradeGuide(u)
+	if err != nil {
+		return err
+	}
+	fmt.Print(guide, "\n\n")
+	return nil
+}
+
+func runUpgradeWorkflow(u upgraderInterface) (*daisy.Workflow, error) {
 	var err error
 
 	// If upgrade failed, run cleanup or rollback before exiting.
 	defer func() {
-		u.handleFailure(err)
+		handleFailure(u, err)
 	}()
-
-	guide, err := getUpgradeGuide(u)
-	if err != nil {
-		return nil, err
-	}
-	fmt.Print(guide, "\n\n")
 
 	// step 1: preparation - take snapshot, attach install media, backup/set startup script
 	fmt.Print("\nPreparing for upgrade...\n\n")
@@ -151,12 +178,13 @@ func (u *Upgrader) runUpgradeWorkflow() (*daisy.Workflow, error) {
 	}
 
 	// step 4: retry upgrade.
-	fmt.Print("\nRunning upgrade...\n\n")
-	upgradeWf, err = u.upgrade()
-	return upgradeWf, err
+	fmt.Print("\nRetrying upgrade...\n\n")
+	retryUpgradeWf, err := u.retryUpgrade()
+	return retryUpgradeWf, err
 }
 
-func (u *Upgrader) handleFailure(err error) {
+func handleFailure(ui upgraderInterface, err error) {
+	u := ui.getUpgrader()
 	if err == nil {
 		fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", u.InstanceURI, u.TargetOS)
 		// TODO: update the help guide link. b/154838004
@@ -171,7 +199,7 @@ func (u *Upgrader) handleFailure(err error) {
 		if isNewOSDiskAttached {
 			fmt.Printf("\nFailed to finish upgrading. Rollback to the "+
 				"original state from the original OS disk '%v'...\n\n", u.osDiskURI)
-			_, err := u.rollback()
+			_, err := ui.rollback()
 			if err != nil {
 				fmt.Printf("\nFailed to rollback. Error: %v\n"+
 					"Please manually rollback following the guide.\n\n", err)
@@ -192,7 +220,7 @@ func (u *Upgrader) handleFailure(err error) {
 			"rollback following the guide.\n\n")
 	}
 	fmt.Print("\nCleaning up temporary resources...\n\n")
-	if _, err := u.cleanup(); err != nil {
+	if _, err := ui.cleanup(); err != nil {
 		fmt.Printf("\nFailed to cleanup temporary resources: %v\n"+
 			"Please follow the guide to manually cleanup.\n\n", err)
 	}

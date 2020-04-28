@@ -24,10 +24,10 @@ require (
 	go.opencensus.io v0.22.3 // indirect
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5 // indirect
 	golang.org/x/net v0.0.0-20200425230154-ff2c4b7c35a0 // indirecresource_labeler_testt
-	golang.org/x/sys v0.0.0-20200427175716-29b57079015a
-	golang.org/x/tools v0.0.0-20200428021058-7ae4988eb4d9 // indirect
+	golang.org/x/sys v0.0.0-20200428200454-593003d681fa
+	golang.org/x/tools v0.0.0-20200428185508-e9a00ec82136 // indirect
 	google.golang.org/api v0.22.0
 	google.golang.org/appengine v1.6.6 // indirect
-	google.golang.org/genproto v0.0.0-20200424135956-bca184e23272 // indirect
+	google.golang.org/genproto v0.0.0-20200428115010-c45acf45369a // indirect
 	google.golang.org/grpc v1.29.1 // indirect
 )
