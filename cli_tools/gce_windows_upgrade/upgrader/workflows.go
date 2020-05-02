@@ -24,15 +24,15 @@ import (
 )
 
 var (
-	upgradeSteps      = map[string]func(*Upgrader, *daisy.Workflow) error{versionWindows2008r2: populateUpgradeStepsFrom2008r2To2012r2}
-	retryUpgradeSteps = map[string]func(*Upgrader, *daisy.Workflow) error{versionWindows2008r2: populateRetryUpgradeStepsFrom2008r2To2012r2}
+	upgradeSteps      = map[string]func(*upgrader, *daisy.Workflow) error{versionWindows2008r2: populateUpgradeStepsFrom2008r2To2012r2}
+	retryUpgradeSteps = map[string]func(*upgrader, *daisy.Workflow) error{versionWindows2008r2: populateRetryUpgradeStepsFrom2008r2To2012r2}
 )
 
-func (u *Upgrader) prepare() (*daisy.Workflow, error) {
+func (u *upgrader) prepare() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("windows-upgrade-preparation", u.Timeout, populatePrepareSteps)
 }
 
-func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
+func populatePrepareSteps(u *upgrader, w *daisy.Workflow) error {
 	w.Sources = map[string]string{"upgrade_script.ps1": fmt.Sprintf("./%v", upgradeScriptName[u.SourceOS])}
 
 	stepStopInstance, err := daisyutils.NewStep(w, "stop-instance")
@@ -40,7 +40,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 		return err
 	}
 	stepStopInstance.StopInstances = &daisy.StopInstances{
-		Instances: []string{u.InstanceURI},
+		Instances: []string{u.instanceURI},
 	}
 	prevStep := stepStopInstance
 
@@ -53,7 +53,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 			&daisy.MachineImage{
 				MachineImage: computeBeta.MachineImage{
 					Name:           u.machineImageBackupName,
-					SourceInstance: u.InstanceURI,
+					SourceInstance: u.instanceURI,
 				},
 				Resource: daisy.Resource{
 					ExactName: true,
@@ -89,7 +89,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 		&daisy.Disk{
 			Disk: compute.Disk{
 				Name:           u.newOSDiskName,
-				Zone:           u.zone,
+				Zone:           u.instanceZone,
 				Type:           u.osDiskType,
 				SourceSnapshot: u.osDiskSnapshotName,
 				Licenses:       []string{licenseToAdd[u.SourceOS]},
@@ -107,8 +107,8 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepDetachOldOSDisk.DetachDisks = &daisy.DetachDisks{
 		&daisy.DetachDisk{
-			Instance:   u.InstanceURI,
-			DeviceName: daisyutils.GetDeviceURI(u.project, u.zone, u.osDiskDeviceName),
+			Instance:   u.instanceURI,
+			DeviceName: daisyutils.GetDeviceURI(u.instanceProject, u.instanceZone, u.osDiskDeviceName),
 		},
 	}
 
@@ -118,7 +118,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepAttachNewOSDisk.AttachDisks = &daisy.AttachDisks{
 		&daisy.AttachDisk{
-			Instance: u.InstanceURI,
+			Instance: u.instanceURI,
 			AttachedDisk: compute.AttachedDisk{
 				Source:     u.newOSDiskName,
 				DeviceName: u.osDiskDeviceName,
@@ -136,7 +136,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 		&daisy.Disk{
 			Disk: compute.Disk{
 				Name:        u.installMediaDiskName,
-				Zone:        u.zone,
+				Zone:        u.instanceZone,
 				Type:        "pd-ssd",
 				SourceImage: "projects/compute-image-tools/global/images/family/windows-install-media",
 			},
@@ -153,7 +153,7 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepAttachInstallDisk.AttachDisks = &daisy.AttachDisks{
 		&daisy.AttachDisk{
-			Instance: u.InstanceURI,
+			Instance: u.instanceURI,
 			AttachedDisk: compute.AttachedDisk{
 				Source:     u.installMediaDiskName,
 				AutoDelete: true,
@@ -162,10 +162,10 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	prevStep = stepAttachInstallDisk
 
-	// 'windows-startup-script-url' exists, backup it
-	if u.windowsStartupScriptURLBackup != nil {
+	// If there isn't an original url, just skip the backup step.
+	if u.originalWindowsStartupScriptURL != nil {
 		fmt.Printf("\nDetected current '%v', value='%v'. Will backup to '%v'.\n\n", metadataKeyWindowsStartupScriptURL,
-			*u.windowsStartupScriptURLBackup, metadataKeyWindowsStartupScriptURLBackup)
+			*u.originalWindowsStartupScriptURL, metadataKeyWindowsStartupScriptURLBackup)
 
 		stepBackupScript, err := daisyutils.NewStep(w, "backup-script", stepAttachInstallDisk)
 		if err != nil {
@@ -173,15 +173,11 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 		}
 		stepBackupScript.UpdateInstancesMetadata = &daisy.UpdateInstancesMetadata{
 			&daisy.UpdateInstanceMetadata{
-				Instance: u.InstanceURI,
-				Metadata: map[string]string{metadataKeyWindowsStartupScriptURLBackup: *u.windowsStartupScriptURLBackup},
+				Instance: u.instanceURI,
+				Metadata: map[string]string{metadataKeyWindowsStartupScriptURLBackup: *u.originalWindowsStartupScriptURL},
 			},
 		}
 		prevStep = stepBackupScript
-	} else {
-		if !u.windowsStartupScriptURLBackupExists {
-			fmt.Printf("\nNo existing startup script (metadata '%v') detected. Won't backup it.\n\n", metadataKeyWindowsStartupScriptURL)
-		}
 	}
 
 	stepSetScript, err := daisyutils.NewStep(w, "set-script", prevStep)
@@ -190,18 +186,18 @@ func populatePrepareSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepSetScript.UpdateInstancesMetadata = &daisy.UpdateInstancesMetadata{
 		&daisy.UpdateInstanceMetadata{
-			Instance: u.InstanceURI,
+			Instance: u.instanceURI,
 			Metadata: map[string]string{metadataKeyWindowsStartupScriptURL: "${SOURCESPATH}/upgrade_script.ps1"},
 		},
 	}
 	return nil
 }
 
-func (u *Upgrader) upgrade() (*daisy.Workflow, error) {
+func (u *upgrader) upgrade() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("upgrade", u.Timeout, upgradeSteps[u.SourceOS])
 }
 
-func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) error {
+func populateUpgradeStepsFrom2008r2To2012r2(u *upgrader, w *daisy.Workflow) error {
 	cleanupWorkflow, err := u.generateWorkflowWithSteps("cleanup", "10m", populateCleanupSteps)
 	if err != nil {
 		return nil
@@ -210,14 +206,14 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 	w.Steps = map[string]*daisy.Step{
 		"start-instance": {
 			StartInstances: &daisy.StartInstances{
-				Instances: []string{u.InstanceURI},
+				Instances: []string{u.instanceURI},
 			},
 		},
 		"wait-for-boot": {
 			Timeout: "15m",
 			WaitForInstancesSignal: &daisy.WaitForInstancesSignal{
 				{
-					Name: u.InstanceURI,
+					Name: u.instanceURI,
 					SerialOutput: &daisy.SerialOutput{
 						Port:         1,
 						SuccessMatch: "GCEMetadataScripts: Beginning upgrade startup script.",
@@ -228,7 +224,7 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 		"wait-for-upgrade": {
 			WaitForAnyInstancesSignal: &daisy.WaitForAnyInstancesSignal{
 				{
-					Name: u.InstanceURI,
+					Name: u.instanceURI,
 					SerialOutput: &daisy.SerialOutput{
 						Port:         1,
 						SuccessMatch: "windows_upgrade_current_version=6.3",
@@ -237,7 +233,7 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 					},
 				},
 				{
-					Name: u.InstanceURI,
+					Name: u.instanceURI,
 					SerialOutput: &daisy.SerialOutput{
 						Port:         3,
 						FailureMatch: []string{"Windows needs to be restarted"},
@@ -259,11 +255,11 @@ func populateUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) erro
 	return nil
 }
 
-func (u *Upgrader) retryUpgrade() (*daisy.Workflow, error) {
+func (u *upgrader) retryUpgrade() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("retry-upgrade", u.Timeout, retryUpgradeSteps[u.SourceOS])
 }
 
-func populateRetryUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow) error {
+func populateRetryUpgradeStepsFrom2008r2To2012r2(u *upgrader, w *daisy.Workflow) error {
 	cleanupWorkflow, err := u.generateWorkflowWithSteps("cleanup", "10m", populateCleanupSteps)
 	if err != nil {
 		return nil
@@ -274,7 +270,7 @@ func populateRetryUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow)
 			Timeout: "15m",
 			WaitForInstancesSignal: &daisy.WaitForInstancesSignal{
 				{
-					Name: u.InstanceURI,
+					Name: u.instanceURI,
 					SerialOutput: &daisy.SerialOutput{
 						Port:         1,
 						SuccessMatch: "GCEMetadataScripts: Beginning upgrade startup script.",
@@ -285,7 +281,7 @@ func populateRetryUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow)
 		"wait-for-upgrade": {
 			WaitForAnyInstancesSignal: &daisy.WaitForAnyInstancesSignal{
 				{
-					Name: u.InstanceURI,
+					Name: u.instanceURI,
 					SerialOutput: &daisy.SerialOutput{
 						Port:         1,
 						SuccessMatch: "windows_upgrade_current_version=6.3",
@@ -307,21 +303,21 @@ func populateRetryUpgradeStepsFrom2008r2To2012r2(u *Upgrader, w *daisy.Workflow)
 	return nil
 }
 
-func (u *Upgrader) reboot() (*daisy.Workflow, error) {
+func (u *upgrader) reboot() (*daisy.Workflow, error) {
 
 	return u.runWorkflowWithSteps("reboot", "15m", populateRebootSteps)
 }
 
-func populateRebootSteps(u *Upgrader, w *daisy.Workflow) error {
+func populateRebootSteps(u *upgrader, w *daisy.Workflow) error {
 	w.Steps = map[string]*daisy.Step{
 		"stop-instance": {
 			StopInstances: &daisy.StopInstances{
-				Instances: []string{u.InstanceURI},
+				Instances: []string{u.instanceURI},
 			},
 		},
 		"start-instance": {
 			StartInstances: &daisy.StartInstances{
-				Instances: []string{u.InstanceURI},
+				Instances: []string{u.instanceURI},
 			},
 		},
 	}
@@ -331,18 +327,19 @@ func populateRebootSteps(u *Upgrader, w *daisy.Workflow) error {
 	return nil
 }
 
-func (u *Upgrader) cleanup() (*daisy.Workflow, error) {
+func (u *upgrader) cleanup() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("cleanup", "10m", populateCleanupSteps)
 }
 
-func populateCleanupSteps(u *Upgrader, w *daisy.Workflow) error {
+func populateCleanupSteps(u *upgrader, w *daisy.Workflow) error {
 	w.Steps = map[string]*daisy.Step{
 		"restore-script": {
 			UpdateInstancesMetadata: &daisy.UpdateInstancesMetadata{
 				{
-					Instance: u.InstanceURI,
+					Instance: u.instanceURI,
 					Metadata: map[string]string{
-						"windows-startup-script-url": u.getOriginalStartupScriptURL(),
+						metadataKeyWindowsStartupScriptURL:       u.getOriginalStartupScriptURL(),
+						metadataKeyWindowsStartupScriptURLBackup: "",
 					},
 				},
 			},
@@ -350,15 +347,15 @@ func populateCleanupSteps(u *Upgrader, w *daisy.Workflow) error {
 		"detach-install-media-disk": {
 			DetachDisks: &daisy.DetachDisks{
 				{
-					Instance:   u.InstanceURI,
-					DeviceName: daisyutils.GetDeviceURI(u.project, u.zone, u.installMediaDiskName),
+					Instance:   u.instanceURI,
+					DeviceName: daisyutils.GetDeviceURI(u.instanceProject, u.instanceZone, u.installMediaDiskName),
 				},
 			},
 		},
 		"delete-install-media-disk": {
 			DeleteResources: &daisy.DeleteResources{
 				Disks: []string{
-					daisyutils.GetDiskURI(u.project, u.zone, u.installMediaDiskName),
+					daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.installMediaDiskName),
 				},
 			},
 		},
@@ -369,17 +366,17 @@ func populateCleanupSteps(u *Upgrader, w *daisy.Workflow) error {
 	return nil
 }
 
-func (u *Upgrader) rollback() (*daisy.Workflow, error) {
+func (u *upgrader) rollback() (*daisy.Workflow, error) {
 	return u.runWorkflowWithSteps("rollback", u.Timeout, populateRollbackSteps)
 }
 
-func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
+func populateRollbackSteps(u *upgrader, w *daisy.Workflow) error {
 	stepStopInstance, err := daisyutils.NewStep(w, "stop-instance")
 	if err != nil {
 		return err
 	}
 	stepStopInstance.StopInstances = &daisy.StopInstances{
-		Instances: []string{u.InstanceURI},
+		Instances: []string{u.instanceURI},
 	}
 
 	stepDetachNewOSDisk, err := daisyutils.NewStep(w, "detach-new-os-disk", stepStopInstance)
@@ -388,8 +385,8 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepDetachNewOSDisk.DetachDisks = &daisy.DetachDisks{
 		{
-			Instance:   u.InstanceURI,
-			DeviceName: daisyutils.GetDeviceURI(u.project, u.zone, u.osDiskDeviceName),
+			Instance:   u.instanceURI,
+			DeviceName: daisyutils.GetDeviceURI(u.instanceProject, u.instanceZone, u.osDiskDeviceName),
 		},
 	}
 
@@ -399,7 +396,7 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepAttachOldOSDisk.AttachDisks = &daisy.AttachDisks{
 		{
-			Instance: u.InstanceURI,
+			Instance: u.instanceURI,
 			AttachedDisk: compute.AttachedDisk{
 				Source:     u.osDiskURI,
 				DeviceName: u.osDiskDeviceName,
@@ -415,8 +412,8 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepDetachInstallMediaDisk.DetachDisks = &daisy.DetachDisks{
 		{
-			Instance:   u.InstanceURI,
-			DeviceName: daisyutils.GetDeviceURI(u.project, u.zone, u.installMediaDiskName),
+			Instance:   u.instanceURI,
+			DeviceName: daisyutils.GetDeviceURI(u.instanceProject, u.instanceZone, u.installMediaDiskName),
 		},
 	}
 
@@ -426,9 +423,10 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepRestoreScript.UpdateInstancesMetadata = &daisy.UpdateInstancesMetadata{
 		{
-			Instance: u.InstanceURI,
+			Instance: u.instanceURI,
 			Metadata: map[string]string{
-				"windows-startup-script-url": u.getOriginalStartupScriptURL(),
+				metadataKeyWindowsStartupScriptURL:       u.getOriginalStartupScriptURL(),
+				metadataKeyWindowsStartupScriptURLBackup: "",
 			},
 		},
 	}
@@ -438,7 +436,7 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 		return err
 	}
 	stepStartInstance.StartInstances = &daisy.StartInstances{
-		Instances: []string{u.InstanceURI},
+		Instances: []string{u.instanceURI},
 	}
 
 	stepDeleteNewOSDisk, err := daisyutils.NewStep(w, "delete-new-os-disk", stepStartInstance)
@@ -447,7 +445,7 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepDeleteNewOSDisk.DeleteResources = &daisy.DeleteResources{
 		Disks: []string{
-			daisyutils.GetDiskURI(u.project, u.zone, u.newOSDiskName),
+			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.newOSDiskName),
 		},
 	}
 
@@ -457,22 +455,22 @@ func populateRollbackSteps(u *Upgrader, w *daisy.Workflow) error {
 	}
 	stepDeleteUpgradeDisks.DeleteResources = &daisy.DeleteResources{
 		Disks: []string{
-			daisyutils.GetDiskURI(u.project, u.zone, u.newOSDiskName),
-			daisyutils.GetDiskURI(u.project, u.zone, u.installMediaDiskName),
+			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.newOSDiskName),
+			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.installMediaDiskName),
 		},
 	}
 	return nil
 }
 
-func (u *Upgrader) getOriginalStartupScriptURL() string {
+func (u *upgrader) getOriginalStartupScriptURL() string {
 	originalStartupScriptURL := ""
-	if u.windowsStartupScriptURLBackup != nil {
-		originalStartupScriptURL = *u.windowsStartupScriptURLBackup
+	if u.originalWindowsStartupScriptURL != nil {
+		originalStartupScriptURL = *u.originalWindowsStartupScriptURL
 	}
 	return originalStartupScriptURL
 }
 
-func (u *Upgrader) runWorkflowWithSteps(name string, timeout string, populateStepsFunc func(*Upgrader, *daisy.Workflow) error) (*daisy.Workflow, error) {
+func (u *upgrader) runWorkflowWithSteps(name string, timeout string, populateStepsFunc func(*upgrader, *daisy.Workflow) error) (*daisy.Workflow, error) {
 	w, err := u.generateWorkflowWithSteps(name, timeout, populateStepsFunc)
 	if err != nil {
 		return w, err
@@ -483,7 +481,7 @@ func (u *Upgrader) runWorkflowWithSteps(name string, timeout string, populateSte
 	return w, err
 }
 
-func (u *Upgrader) generateWorkflowWithSteps(name string, timeout string, populateStepsFunc func(*Upgrader, *daisy.Workflow) error) (*daisy.Workflow, error) {
+func (u *upgrader) generateWorkflowWithSteps(name string, timeout string, populateStepsFunc func(*upgrader, *daisy.Workflow) error) (*daisy.Workflow, error) {
 	w := daisy.New()
 	w.Name = name
 	w.DefaultTimeout = timeout

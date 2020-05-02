@@ -24,7 +24,7 @@ import (
 func TestGeneratePrepareWorkflow(t *testing.T) {
 	type testCase struct {
 		testName               string
-		populateFunc           func(*Upgrader, *daisy.Workflow) error
+		populateFunc           func(*upgrader, *daisy.Workflow) error
 		instanceName           string
 		expectError            bool
 		skipMachineImageBackup bool
@@ -37,11 +37,11 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 
 	for _, tc := range tcs {
 		u := initTest()
-		u.InstanceURI = daisyutils.GetInstanceURI(testProject, testZone, tc.instanceName)
+		u.Instance = daisyutils.GetInstanceURI(testProject, testZone, tc.instanceName)
 
-		err := u.validateParams()
+		err := u.validateAndDeriveParams()
 		if err != nil {
-			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			t.Errorf("[%v]: validateAndDeriveParams failed: %v", tc.testName, err)
 			continue
 		}
 
@@ -71,7 +71,7 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 func TestGenerateStaticWorkflow(t *testing.T) {
 	type testCase struct {
 		testName     string
-		populateFunc func(*Upgrader, *daisy.Workflow) error
+		populateFunc func(*upgrader, *daisy.Workflow) error
 		instanceName string
 		expectError  bool
 	}
@@ -98,11 +98,11 @@ func TestGenerateStaticWorkflow(t *testing.T) {
 
 	for _, tc := range tcs {
 		u := initTest()
-		u.InstanceURI = daisyutils.GetInstanceURI(testProject, testZone, tc.instanceName)
+		u.Instance = daisyutils.GetInstanceURI(testProject, testZone, tc.instanceName)
 
-		err := u.validateParams()
+		err := u.validateAndDeriveParams()
 		if err != nil {
-			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			t.Errorf("[%v]: validateAndDeriveParams failed: %v", tc.testName, err)
 			continue
 		}
 
@@ -118,18 +118,18 @@ func TestGenerateStaticWorkflow(t *testing.T) {
 func TestRunWorkflowWithSteps(t *testing.T) {
 	type testCase struct {
 		testName                  string
-		populateFunc              func(*Upgrader, *daisy.Workflow) error
+		populateFunc              func(*upgrader, *daisy.Workflow) error
 		expectExitOnPopulateSteps bool
 	}
 
 	tcs := []testCase{
-		{"populate without error", func(u *Upgrader, w *daisy.Workflow) error {
+		{"populate without error", func(u *upgrader, w *daisy.Workflow) error {
 			w.Steps = map[string]*daisy.Step{
 				"step1": {},
 			}
 			return nil
 		}, false},
-		{"populate with error", func(u *Upgrader, w *daisy.Workflow) error {
+		{"populate with error", func(u *upgrader, w *daisy.Workflow) error {
 			w.Steps = map[string]*daisy.Step{
 				"step1": {},
 			}
@@ -139,9 +139,9 @@ func TestRunWorkflowWithSteps(t *testing.T) {
 
 	for _, tc := range tcs {
 		u := initTest()
-		err := u.validateParams()
+		err := u.validateAndDeriveParams()
 		if err != nil {
-			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			t.Errorf("[%v]: validateAndDeriveParams failed: %v", tc.testName, err)
 			continue
 		}
 
@@ -178,9 +178,9 @@ func TestRunAllWorkflowFunctions(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		err := u.validateParams()
+		err := u.validateAndDeriveParams()
 		if err != nil {
-			t.Errorf("[%v]: validateParams failed: %v", tc.testName, err)
+			t.Errorf("[%v]: validateAndDeriveParams failed: %v", tc.testName, err)
 			continue
 		}
 

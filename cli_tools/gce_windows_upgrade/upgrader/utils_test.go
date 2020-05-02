@@ -46,7 +46,7 @@ func TestIsNewOSDiskAttached(t *testing.T) {
 	}
 }
 
-func TestGetUpgradeGuide(t *testing.T) {
+func TestGetIntroHelpText(t *testing.T) {
 	type testCase struct {
 		name         string
 		scriptURLPtr *string
@@ -59,12 +59,12 @@ func TestGetUpgradeGuide(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		u := Upgrader{
+		u := upgrader{
 			derivedVars: &derivedVars{
-				windowsStartupScriptURLBackup: tc.scriptURLPtr,
+				originalWindowsStartupScriptURL: tc.scriptURLPtr,
 			},
 		}
-		_, err := getUpgradeGuide(&u)
+		_, err := getIntroHelpText(&u)
 		if err != nil {
 			t.Errorf("[%v]: Unexpected error: '%v'", tc.name, err)
 		}

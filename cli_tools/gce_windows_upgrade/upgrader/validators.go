@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/domain"
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
@@ -37,9 +38,10 @@ var (
 	instanceURLRgx = regexp.MustCompile(fmt.Sprintf(`^(projects/(?P<project>%[1]s)/)?zones/(?P<zone>%[2]s)/instances/(?P<instance>%[2]s)$`, projectRgxStr, rfc1035))
 
 	computeClient daisyCompute.Client
+	mgce          domain.MetadataGCEInterface
 )
 
-func (u *Upgrader) validateParams() error {
+func (u *upgrader) validateAndDeriveParams() error {
 	if u.derivedVars == nil {
 		u.derivedVars = &derivedVars{}
 	}
@@ -50,10 +52,10 @@ func (u *Upgrader) validateParams() error {
 	if err := validateOSVersion(u.SourceOS, u.TargetOS); err != nil {
 		return err
 	}
-	if err := validateInstanceURI(u.InstanceURI, u.derivedVars); err != nil {
+	if err := validateAndDeriveInstanceURI(u.Instance, u.ProjectPtr, u.Zone, u.derivedVars); err != nil {
 		return err
 	}
-	if err := validateInstance(u.derivedVars, u.SourceOS); err != nil {
+	if err := validateAndDeriveInstance(u.derivedVars, u.SourceOS); err != nil {
 		return err
 	}
 
@@ -69,7 +71,7 @@ func (u *Upgrader) validateParams() error {
 	u.installMediaDiskName = fmt.Sprintf("windows-install-media-%v", suffix)
 
 	// Update 'project' value for logging purpose
-	*u.ProjectPtr = u.project
+	*u.ProjectPtr = u.instanceProject
 
 	return nil
 }
@@ -95,22 +97,33 @@ func validateOSVersion(sourceOS, targetOS string) error {
 	return nil
 }
 
-func validateInstanceURI(instanceURI string, derivedVars *derivedVars) error {
-	if instanceURI == "" {
+func validateAndDeriveInstanceURI(instance string, projectPtr *string, inputZone string, derivedVars *derivedVars) error {
+	if instance == "" {
 		return daisy.Errf("Flag -instance must be provided")
 	}
-	m := daisy.NamedSubexp(instanceURLRgx, instanceURI)
-	if m == nil {
-		return daisy.Errf("Please provide the instance flag in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", instanceURI)
+	derivedVars.instanceURI = instance
+	if !strings.Contains(instance, "/") {
+		if err := param.PopulateProjectIfMissing(mgce, projectPtr); err != nil {
+			return err
+		}
+		if inputZone == "" {
+			return daisy.Errf("--zone must be provided when --instance is not a URI with zone info.")
+		}
+		derivedVars.instanceURI = daisyutils.GetInstanceURI(*projectPtr, inputZone, instance)
 	}
-	derivedVars.project = m["project"]
-	derivedVars.zone = m["zone"]
+
+	m := daisy.NamedSubexp(instanceURLRgx, derivedVars.instanceURI)
+	if m == nil {
+		return daisy.Errf("Please provide the instance flag either with the name of the instance or in the form of 'projects/<project>/zones/<zone>/instances/<instance>', not %s", instance)
+	}
+	derivedVars.instanceProject = m["project"]
+	derivedVars.instanceZone = m["zone"]
 	derivedVars.instanceName = m["instance"]
 	return nil
 }
 
-func validateInstance(derivedVars *derivedVars, sourceOS string) error {
-	inst, err := computeClient.GetInstance(derivedVars.project, derivedVars.zone, derivedVars.instanceName)
+func validateAndDeriveInstance(derivedVars *derivedVars, sourceOS string) error {
+	inst, err := computeClient.GetInstance(derivedVars.instanceProject, derivedVars.instanceZone, derivedVars.instanceName)
 	if err != nil {
 		return daisy.Errf("Failed to get instance: %v", err)
 	}
@@ -118,42 +131,63 @@ func validateInstance(derivedVars *derivedVars, sourceOS string) error {
 	if len(inst.Disks) == 0 {
 		return daisy.Errf("No disks attached to the instance.")
 	}
-	if err := validateOSDisk(inst.Disks[0], derivedVars); err != nil {
+	// Boot disk is always with index=0: https://cloud.google.com/compute/docs/reference/rest/v1/instances/attachDisk
+	// "0 is reserved for the boot disk"
+	bootDisk := inst.Disks[0]
+	if err := validateAndDeriveOSDisk(bootDisk, derivedVars); err != nil {
 		return err
 	}
-	if err := validateLicense(inst.Disks[0], sourceOS); err != nil {
+	if err := validateLicense(bootDisk, sourceOS); err != nil {
 		return err
 	}
 
+	// We need to launch upgrade by a startup script, whose URL is set by a metadata
+	// 'windows-startup-script-url'.
+	// If that metadata key has been used by the customer before the upgrade, we need
+	// to backup it and restore after the upgrade finished. We backup it to metadata
+	// 'windows-startup-script-url-backup'.
+	// There are 3 possible scenarios:
+	// 1. 'windows-startup-script-url' doesn't exist originally. Which means, the customer
+	//    doesn't set it. In that case, we don't need to backup anything.
+	// 2. 'windows-startup-script-url' exists. Which means, the customer set it for
+	//    their purposes. We should backup it in order to restore from it when cleanup
+	//    or rollback.
+	// 3. 'windows-startup-script-url' exists, but 'windows-startup-script-url-backup'
+	//    also exists. That means the customer tried to run upgrade before but got
+	//    interrupted for some reason. In that case, 'windows-startup-script-url'
+	//    must have been modified, so we should backup 'windows-startup-script-url-backup'
+	//    instead.
 	if inst.Metadata != nil && inst.Metadata.Items != nil {
-		for _, metadataItem := range inst.Metadata.Items {
-			if metadataItem.Key == metadataKeyWindowsStartupScriptURL {
-				derivedVars.windowsStartupScriptURLBackup = metadataItem.Value
-			} else if metadataItem.Key == metadataKeyWindowsStartupScriptURLBackup {
-				derivedVars.windowsStartupScriptURLBackupExists = true
-			}
+		originalURL := getMetadataValue(inst.Metadata.Items, metadataKeyWindowsStartupScriptURLBackup)
+		if originalURL == nil {
+			originalURL = getMetadataValue(inst.Metadata.Items, metadataKeyWindowsStartupScriptURL)
 		}
+		derivedVars.originalWindowsStartupScriptURL = originalURL
 	}
-	// If script url backup exists, don't backup again to avoid overwriting
-	if derivedVars.windowsStartupScriptURLBackupExists {
-		derivedVars.windowsStartupScriptURLBackup = nil
-		fmt.Printf("\n'%v' was backed up to '%v' before.\n\n",
-			metadataKeyWindowsStartupScriptURL, metadataKeyWindowsStartupScriptURLBackup)
+
+	return nil
+}
+
+func getMetadataValue(items []*compute.MetadataItems, key string) *string {
+	for _, metadataItem := range items {
+		if metadataItem.Key == key && metadataItem.Value != nil && *metadataItem.Value != "" {
+			return metadataItem.Value
+		}
 	}
 	return nil
 }
 
-func validateOSDisk(osDisk *compute.AttachedDisk, derivedVars *derivedVars) error {
+func validateAndDeriveOSDisk(osDisk *compute.AttachedDisk, derivedVars *derivedVars) error {
 	if osDisk.Boot == false {
 		return daisy.Errf("The instance has no boot disk.")
 	}
 	osDiskName := daisyutils.GetResourceRealName(osDisk.Source)
-	d, err := computeClient.GetDisk(derivedVars.project, derivedVars.zone, osDiskName)
+	d, err := computeClient.GetDisk(derivedVars.instanceProject, derivedVars.instanceZone, osDiskName)
 	if err != nil {
 		return daisy.Errf("Failed to get OS disk info: %v", err)
 	}
 
-	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.zone, "disks", osDisk.Source)
+	derivedVars.osDiskURI = param.GetZonalResourcePath(derivedVars.instanceZone, "disks", osDisk.Source)
 	derivedVars.osDiskDeviceName = osDisk.DeviceName
 	derivedVars.osDiskAutoDelete = osDisk.AutoDelete
 	derivedVars.osDiskType = daisyutils.GetResourceRealName(d.Type)

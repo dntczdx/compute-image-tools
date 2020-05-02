@@ -27,11 +27,12 @@ import (
 )
 
 var (
-	// project/zone/network/subnet/labels are not required when the upgrade has to happen in place.
 	clientID               = flag.String(upgrader.ClientIDFlagKey, "", "Identifies the client of the importer, e.g. `gcloud` or `pantheon`.")
-	instance               = flag.String("instance", "", "Instance to upgrade, in the form of 'projects/<project>/zones/<zone>/instances/<instance>'.")
+	project                = flag.String("project", "", "Project to run in.")
+	zone                   = flag.String("zone", "", "Zone of the instance to upgrade. It will be overrided if 'instance' contains a different zone.")
+	instance               = flag.String("instance", "", "Instance to upgrade, either the instance name or in the form of 'projects/<project>/zones/<zone>/instances/<instance>'.")
 	skipMachineImageBackup = flag.Bool("skip-machine-image-backup", false, "Skip backup for the instance. It's not recommended to skip machine image backup if the instance is not already backed up.")
-	autoRollback           = flag.Bool("auto-rollback", false, "Rollback automatically if upgrade failed. If enabled, debugging upgrade failure reason will be impossible.")
+	autoRollback           = flag.Bool("auto-rollback", false, "Rollback automatically if upgrade failed. If enabled, the OS disk that failed to upgrade will be deleted making debugging harder.")
 	sourceOS               = flag.String("source-os", "", fmt.Sprintf("Source OS version of the instance to be upgraded. Supported values: %v", strings.Join(upgrader.SupportedSourceOSVersions(), ", ")))
 	targetOS               = flag.String("target-os", "", fmt.Sprintf("Target OS version to upgrade the instance to. Supported values: %v", strings.Join(upgrader.SupportedTargetOSVersions(), ", ")))
 	timeout                = flag.String("timeout", "", "Maximum time an upgrade can take before it times out. For example, specifying 2h will fail the process after 2 hours. See $ gcloud topic datetimes for information on duration formats.")
@@ -41,20 +42,19 @@ var (
 	gcsLogsDisabled        = flag.Bool("disable-gcs-logging", false, "Do not stream logs to GCS.")
 	cloudLogsDisabled      = flag.Bool("disable-cloud-logging", false, "Do not stream logs to Cloud Logging.")
 	stdoutLogsDisabled     = flag.Bool("disable-stdout-logging", false, "Do not display detailed logs on stdout.")
-
-	project = new(string)
 )
 
 func upgradeEntry() (*daisy.Workflow, error) {
 	currentExecutablePath := string(os.Args[0])
-	u := &upgrader.Upgrader{
+	p := &upgrader.InputParams{
 		ClientID:               strings.TrimSpace(*clientID),
-		InstanceURI:            strings.TrimSpace(*instance),
+		Instance:               strings.TrimSpace(*instance),
 		SkipMachineImageBackup: *skipMachineImageBackup,
 		AutoRollback:           *autoRollback,
 		SourceOS:               strings.TrimSpace(*sourceOS),
 		TargetOS:               strings.TrimSpace(*targetOS),
 		ProjectPtr:             project,
+		Zone:                   *zone,
 		Timeout:                strings.TrimSpace(*timeout),
 		ScratchBucketGcsPath:   strings.TrimSpace(*scratchBucketGcsPath),
 		Oauth:                  strings.TrimSpace(*oauth),
@@ -65,7 +65,7 @@ func upgradeEntry() (*daisy.Workflow, error) {
 		CurrentExecutablePath:  currentExecutablePath,
 	}
 
-	return upgrader.Run(u)
+	return upgrader.Run(p)
 }
 
 func main() {
@@ -78,6 +78,7 @@ func main() {
 				Timeout:                 *timeout,
 				Project:                 *project,
 				ObfuscatedProject:       service.Hash(*project),
+				Zone:                    *zone,
 				ScratchBucketGcsPath:    *scratchBucketGcsPath,
 				Oauth:                   *oauth,
 				ComputeEndpointOverride: *ce,

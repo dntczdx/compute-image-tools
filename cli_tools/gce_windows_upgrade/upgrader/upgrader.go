@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/compute"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	"google.golang.org/api/option"
@@ -41,9 +42,6 @@ const (
 )
 
 var (
-	supportedSourceOSVersions = map[string]string{versionWindows2008r2: versionWindows2012r2}
-	supportedTargetOSVersions = reverseMap(supportedSourceOSVersions)
-
 	upgradeScriptName = map[string]string{versionWindows2008r2: "upgrade_script_2008r2_to_2012r2.ps1"}
 
 	expectedCurrentLicense = map[string]string{versionWindows2008r2: "projects/windows-cloud/global/licenses/windows-server-2008-r2-dc"}
@@ -51,8 +49,9 @@ var (
 )
 
 type derivedVars struct {
-	project string
-	zone    string
+	instanceProject string
+	instanceZone    string
+	instanceURI     string
 
 	osDiskURI        string
 	osDiskType       string
@@ -65,20 +64,19 @@ type derivedVars struct {
 	newOSDiskName          string
 	installMediaDiskName   string
 
-	windowsStartupScriptURLBackup       *string
-	windowsStartupScriptURLBackupExists bool
+	originalWindowsStartupScriptURL *string
 }
 
-// Upgrader implements upgrading logic.
-type Upgrader struct {
-	// Input params
+// InputParams contains input params for the upgrade.
+type InputParams struct {
 	ClientID               string
-	InstanceURI            string
+	ProjectPtr             *string
+	Zone                   string
+	Instance               string
 	SkipMachineImageBackup bool
 	AutoRollback           bool
 	SourceOS               string
 	TargetOS               string
-	ProjectPtr             *string
 	Timeout                string
 	ScratchBucketGcsPath   string
 	Oauth                  string
@@ -87,17 +85,20 @@ type Upgrader struct {
 	CloudLogsDisabled      bool
 	StdoutLogsDisabled     bool
 	CurrentExecutablePath  string
+}
 
+type upgrader struct {
+	*InputParams
 	*derivedVars
 
 	ctx context.Context
 }
 
 type upgraderInterface interface {
-	getUpgrader() *Upgrader
+	getUpgrader() *upgrader
 	init() error
-	validateParams() error
-	printUpgradeGuide() error
+	validateAndDeriveParams() error
+	printIntroHelpText() error
 	prepare() (*daisy.Workflow, error)
 	upgrade() (*daisy.Workflow, error)
 	retryUpgrade() (*daisy.Workflow, error)
@@ -107,37 +108,42 @@ type upgraderInterface interface {
 }
 
 // Run runs upgrade workflow.
-func Run(u upgraderInterface) (*daisy.Workflow, error) {
+func Run(p *InputParams) (*daisy.Workflow, error) {
+	return run(&upgrader{InputParams: p})
+}
+
+func run(u upgraderInterface) (*daisy.Workflow, error) {
 	if err := u.init(); err != nil {
 		return nil, err
 	}
-	if err := u.validateParams(); err != nil {
+	if err := u.validateAndDeriveParams(); err != nil {
 		return nil, err
 	}
-	if err := u.printUpgradeGuide(); err != nil {
+	if err := u.printIntroHelpText(); err != nil {
 		return nil, err
 	}
 	return runUpgradeWorkflow(u)
 }
 
-func (u *Upgrader) getUpgrader() *Upgrader {
+func (u *upgrader) getUpgrader() *upgrader {
 	return u
 }
 
-func (u *Upgrader) init() error {
+func (u *upgrader) init() error {
 	log.SetPrefix(logPrefix + " ")
 
 	var err error
 	u.ctx = context.Background()
 	computeClient, err = daisyCompute.NewClient(u.ctx, option.WithCredentialsFile(u.Oauth))
+	mgce = &compute.MetadataGCE{}
 	if err != nil {
 		return daisy.Errf("Failed to create GCE client: %v", err)
 	}
 	return nil
 }
 
-func (u *Upgrader) printUpgradeGuide() error {
-	guide, err := getUpgradeGuide(u)
+func (u *upgrader) printIntroHelpText() error {
+	guide, err := getIntroHelpText(u)
 	if err != nil {
 		return err
 	}
@@ -186,7 +192,7 @@ func runUpgradeWorkflow(u upgraderInterface) (*daisy.Workflow, error) {
 func handleFailure(ui upgraderInterface, err error) {
 	u := ui.getUpgrader()
 	if err == nil {
-		fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", u.InstanceURI, u.TargetOS)
+		fmt.Printf("\nSuccessfully upgraded instance '%v' to %v!\n", u.instanceURI, u.TargetOS)
 		// TODO: update the help guide link. b/154838004
 		fmt.Printf("\nPlease verify your applications' functionality of " +
 			"the instance. If it has a problem and can't be fixed, please manually " +
@@ -194,7 +200,7 @@ func handleFailure(ui upgraderInterface, err error) {
 		return
 	}
 
-	isNewOSDiskAttached := isNewOSDiskAttached(u.project, u.zone, u.instanceName, u.newOSDiskName)
+	isNewOSDiskAttached := isNewOSDiskAttached(u.instanceProject, u.instanceZone, u.instanceName, u.newOSDiskName)
 	if u.AutoRollback {
 		if isNewOSDiskAttached {
 			fmt.Printf("\nFailed to finish upgrading. Rollback to the "+
@@ -215,10 +221,11 @@ func handleFailure(ui upgraderInterface, err error) {
 			"please verify whether original OS disk %v is attached and whether the "+
 			"instance has been started. If necessary, please manually rollback "+
 			"following the guide.\n\n", u.osDiskURI)
-	} else if isNewOSDiskAttached {
-		fmt.Printf("\nFailed to finish upgrading. Please manually " +
-			"rollback following the guide.\n\n")
 	}
+
+	fmt.Printf("\nFailed to finish upgrading. Please manually " +
+		"rollback following the guide.\n\n")
+
 	fmt.Print("\nCleaning up temporary resources...\n\n")
 	if _, err := ui.cleanup(); err != nil {
 		fmt.Printf("\nFailed to cleanup temporary resources: %v\n"+

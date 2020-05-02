@@ -20,6 +20,7 @@ import (
 	"text/template"
 
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/param"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
 )
@@ -59,36 +60,25 @@ const (
 		"\n"
 )
 
-func reverseMap(m map[string]string) map[string]string {
-	newMap := make(map[string]string, len(m))
-	for k, v := range m {
-		newMap[v] = k
-	}
-	return newMap
-}
-
-func getKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
+var (
+	supportedSourceOSVersions    = map[string]string{versionWindows2008r2: versionWindows2012r2}
+	supportedTargetOSVersions, _ = param.ReverseMap(supportedSourceOSVersions)
+)
 
 // SupportedSourceOSVersions returns supported source versions of upgrading
 func SupportedSourceOSVersions() []string {
-	return getKeys(supportedTargetOSVersions)
+	return param.GetKeys(supportedSourceOSVersions)
 }
 
 // SupportedTargetOSVersions returns supported target versions of upgrading
 func SupportedTargetOSVersions() []string {
-	return getKeys(supportedTargetOSVersions)
+	return param.GetKeys(supportedTargetOSVersions)
 }
 
-func getUpgradeGuide(u *Upgrader) (string, error) {
+func getIntroHelpText(u *upgrader) (string, error) {
 	originalStartupScriptURL := "None."
-	if u.windowsStartupScriptURLBackup != nil {
-		originalStartupScriptURL = *u.windowsStartupScriptURLBackup
+	if u.originalWindowsStartupScriptURL != nil {
+		originalStartupScriptURL = *u.originalWindowsStartupScriptURL
 	}
 	if u.machineImageBackupName == "" {
 		u.machineImageBackupName = "Not created. Machine Image backup is disabled."
@@ -100,8 +90,8 @@ func getUpgradeGuide(u *Upgrader) (string, error) {
 	}
 	var buf bytes.Buffer
 	varMap := map[string]interface{}{
-		"project":                  u.project,
-		"zone":                     u.zone,
+		"project":                  u.instanceProject,
+		"zone":                     u.instanceZone,
 		"instanceName":             u.instanceName,
 		"installMediaDiskName":     u.installMediaDiskName,
 		"osDiskSnapshotName":       u.osDiskSnapshotName,
@@ -124,7 +114,14 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 		// failed to fetch info. Can't guarantee new OS disk is attached.
 		return false
 	}
-	if inst.Disks == nil || len(inst.Disks) == 0 || inst.Disks[0].Boot == false {
+
+	// If the "prepare" workflow failed when the original OS disk has been dettached
+	// but new OS disk hasn't been attached, we won't find a boot disk from the instance.
+	// The instance will either have no disk (while it had only a boot disk originally),
+	// or have some data disks (while it had more than one disks originally).
+	// Boot disk is always with index=0: https://cloud.google.com/compute/docs/reference/rest/v1/instances/attachDisk
+	// "0 is reserved for the boot disk"
+	if len(inst.Disks) == 0 || inst.Disks[0].Boot == false {
 		// if the instance has no boot disk attached
 		return false
 	}
@@ -138,10 +135,12 @@ func isNewOSDiskAttached(project, zone, instanceName, newOSDiskName string) bool
 }
 
 func needReboot(err error) bool {
+	// windows-2008r2 will emit this error string to the serial port when a
+	// restarting is required
 	return strings.Contains(err.Error(), "Windows needs to be restarted")
 }
 
-func setWorkflowAttributes(w *daisy.Workflow, u *Upgrader) {
-	daisycommon.SetWorkflowAttributes(w, u.project, u.zone, u.ScratchBucketGcsPath,
+func setWorkflowAttributes(w *daisy.Workflow, u *upgrader) {
+	daisycommon.SetWorkflowAttributes(w, u.instanceProject, u.instanceZone, u.ScratchBucketGcsPath,
 		u.Oauth, u.Timeout, u.Ce, u.GcsLogsDisabled, u.CloudLogsDisabled, u.StdoutLogsDisabled)
 }

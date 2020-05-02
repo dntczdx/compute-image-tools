@@ -22,82 +22,82 @@ import (
 )
 
 type TestUpgrader struct {
-	*Upgrader
+	*upgrader
 
-	initFn              func() error
-	printUpgradeGuideFn func() error
-	validateParamsFn    func() error
-	prepareFn           func() (*daisy.Workflow, error)
-	upgradeFn           func() (*daisy.Workflow, error)
-	retryUpgradeFn      func() (*daisy.Workflow, error)
-	rebootFn            func() (*daisy.Workflow, error)
-	cleanupFn           func() (*daisy.Workflow, error)
-	rollbackFn          func() (*daisy.Workflow, error)
+	initFn               func() error
+	printIntroHelpTextFn func() error
+	validateParamsFn     func() error
+	prepareFn            func() (*daisy.Workflow, error)
+	upgradeFn            func() (*daisy.Workflow, error)
+	retryUpgradeFn       func() (*daisy.Workflow, error)
+	rebootFn             func() (*daisy.Workflow, error)
+	cleanupFn            func() (*daisy.Workflow, error)
+	rollbackFn           func() (*daisy.Workflow, error)
 }
 
-func (tu *TestUpgrader) getUpgrader() *Upgrader {
-	return tu.Upgrader
+func (tu *TestUpgrader) getUpgrader() *upgrader {
+	return tu.upgrader
 }
 
 func (tu *TestUpgrader) init() error {
 	if tu.initFn == nil {
-		return tu.Upgrader.init()
+		return tu.upgrader.init()
 	}
 	return tu.initFn()
 }
 
-func (tu *TestUpgrader) printUpgradeGuide() error {
-	if tu.printUpgradeGuideFn == nil {
-		return tu.Upgrader.printUpgradeGuide()
+func (tu *TestUpgrader) printIntroHelpText() error {
+	if tu.printIntroHelpTextFn == nil {
+		return tu.upgrader.printIntroHelpText()
 	}
-	return tu.printUpgradeGuideFn()
+	return tu.printIntroHelpTextFn()
 }
 
-func (tu *TestUpgrader) validateParams() error {
+func (tu *TestUpgrader) validateAndDeriveParams() error {
 	if tu.validateParamsFn == nil {
-		return tu.Upgrader.validateParams()
+		return tu.upgrader.validateAndDeriveParams()
 	}
 	return tu.validateParamsFn()
 }
 
 func (tu *TestUpgrader) prepare() (*daisy.Workflow, error) {
 	if tu.prepareFn == nil {
-		return tu.Upgrader.prepare()
+		return tu.upgrader.prepare()
 	}
 	return tu.prepareFn()
 }
 
 func (tu *TestUpgrader) upgrade() (*daisy.Workflow, error) {
 	if tu.upgradeFn == nil {
-		return tu.Upgrader.upgrade()
+		return tu.upgrader.upgrade()
 	}
 	return tu.upgradeFn()
 }
 
 func (tu *TestUpgrader) retryUpgrade() (*daisy.Workflow, error) {
 	if tu.retryUpgradeFn == nil {
-		return tu.Upgrader.retryUpgrade()
+		return tu.upgrader.retryUpgrade()
 	}
 	return tu.retryUpgradeFn()
 }
 
 func (tu *TestUpgrader) reboot() (*daisy.Workflow, error) {
 	if tu.rebootFn == nil {
-		return tu.Upgrader.reboot()
+		return tu.upgrader.reboot()
 	}
 	return tu.rebootFn()
 }
 
 func (tu *TestUpgrader) cleanup() (*daisy.Workflow, error) {
 	if tu.cleanupFn == nil {
-		return tu.Upgrader.cleanup()
+		return tu.upgrader.cleanup()
 	}
 	return tu.cleanupFn()
 }
 
 func (tu *TestUpgrader) rollback() (*daisy.Workflow, error) {
 	if tu.rollbackFn == nil {
-		return tu.Upgrader.rollback()
+		return tu.upgrader.rollback()
 	}
 	return tu.rollbackFn()
 }
@@ -107,7 +107,7 @@ func TestUpgraderRunFailedOnInit(t *testing.T) {
 	tu.initFn = nil
 	tu.Oauth = "bad-oauth"
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	}
@@ -119,7 +119,7 @@ func TestUpgraderRunFailedOnValidateParams(t *testing.T) {
 		return fmt.Errorf("failed")
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -129,11 +129,11 @@ func TestUpgraderRunFailedOnValidateParams(t *testing.T) {
 
 func TestUpgraderRunFailedOnPrintUpgradeGuide(t *testing.T) {
 	tu := initTestUpgrader(t)
-	tu.printUpgradeGuideFn = func() error {
+	tu.printIntroHelpTextFn = func() error {
 		return fmt.Errorf("failed")
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -150,7 +150,7 @@ func TestUpgraderRunFailedOnPrepare(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -167,7 +167,7 @@ func TestUpgraderRunFailedOnUpgrade(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -187,7 +187,7 @@ func TestUpgraderRunFailedOnReboot(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -210,7 +210,7 @@ func TestUpgraderRunFailedOnRetryUpgrade(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	} else if err.Error() != "failed" {
@@ -221,7 +221,7 @@ func TestUpgraderRunFailedOnRetryUpgrade(t *testing.T) {
 func TestUpgraderRunSuccessWithoutReboot(t *testing.T) {
 	tu := initTestUpgrader(t)
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err != nil {
 		t.Errorf("Unexpected error '%v'.", err)
 	}
@@ -239,7 +239,7 @@ func TestUpgraderRunSuccessWithReboot(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err != nil {
 		t.Errorf("Unexpected error '%v'.", err)
 	}
@@ -264,7 +264,7 @@ func TestUpgraderRunFailedWithAutoRollback(t *testing.T) {
 		return nil, nil
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	}
@@ -288,7 +288,7 @@ func TestUpgraderRunFailedWithAutoRollbackFailed(t *testing.T) {
 		return nil, fmt.Errorf("failed")
 	}
 
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	}
@@ -308,7 +308,7 @@ func TestUpgraderRunFailedWithAutoRollbackWithoutNewOSDiskAttached(t *testing.T)
 		cleanupExecuted = true
 		return nil, fmt.Errorf("failed")
 	}
-	_, err := Run(tu)
+	_, err := run(tu)
 	if err == nil {
 		t.Errorf("Expect error but none.")
 	}
@@ -319,7 +319,7 @@ func TestUpgraderRunFailedWithAutoRollbackWithoutNewOSDiskAttached(t *testing.T)
 
 func initTestUpgrader(t *testing.T) *TestUpgrader {
 	u := initTest()
-	tu := &TestUpgrader{Upgrader: u}
+	tu := &TestUpgrader{upgrader: u}
 	tu.initFn = func() error {
 		computeClient = newTestGCEClient()
 		return nil

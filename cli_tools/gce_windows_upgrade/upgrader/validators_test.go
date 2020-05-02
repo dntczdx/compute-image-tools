@@ -18,19 +18,22 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/domain"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
+	"github.com/GoogleCloudPlatform/compute-image-tools/mocks"
+	"github.com/golang/mock/gomock"
 	"google.golang.org/api/compute/v1"
 )
 
 func TestValidateParams(t *testing.T) {
 	type testCase struct {
 		testName        string
-		u               *Upgrader
+		u               *upgrader
 		expectError     bool
 		expectedTimeout string
 	}
 
-	var u *Upgrader
+	var u *upgrader
 	var tcs []testCase
 
 	tcs = append(tcs, testCase{"Normal case", initTest(), false, DefaultTimeout})
@@ -44,12 +47,12 @@ func TestValidateParams(t *testing.T) {
 	tcs = append(tcs, testCase{"validateOSVersion failure", u, true, DefaultTimeout})
 
 	u = initTest()
-	u.InstanceURI = "bad/url"
-	tcs = append(tcs, testCase{"validateInstanceURI failure", u, true, DefaultTimeout})
+	u.Instance = "bad/url"
+	tcs = append(tcs, testCase{"validateAndDeriveInstanceURI failure", u, true, DefaultTimeout})
 
 	u = initTest()
-	u.InstanceURI = daisy.GetInstanceURI(testProject, testZone, testInstanceNoLicense)
-	tcs = append(tcs, testCase{"validateInstance failure", u, true, DefaultTimeout})
+	u.Instance = daisy.GetInstanceURI(testProject, testZone, testInstanceNoLicense)
+	tcs = append(tcs, testCase{"validateAndDeriveInstance failure", u, true, DefaultTimeout})
 
 	u = initTest()
 	u.Timeout = "1m"
@@ -57,7 +60,7 @@ func TestValidateParams(t *testing.T) {
 
 	for _, tc := range tcs {
 		u = tc.u
-		err := u.validateParams()
+		err := u.validateAndDeriveParams()
 		if tc.expectError && err == nil {
 			t.Errorf("[%v]: Expect error but none.", tc.testName)
 		} else if !tc.expectError && err != nil {
@@ -125,103 +128,220 @@ func TestValidateInstance(t *testing.T) {
 	initTest()
 
 	type testCase struct {
-		testName    string
-		instanceURI string
-		expectError bool
+		testName           string
+		instance           string
+		expectURIError     bool
+		expectError        bool
+		inputProject       string
+		inputZone          string
+		expectProject      string
+		expectZone         string
+		expectInstanceName string
+		mgce               domain.MetadataGCEInterface
 	}
+
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mockMetadataGce := mocks.NewMockMetadataGCEInterface(mockCtrl)
+	mockMetadataGce.EXPECT().OnGCE().Return(true)
+	mockMetadataGce.EXPECT().ProjectID().Return(testProject2, nil)
+
+	mockMetadataGceFail := mocks.NewMockMetadataGCEInterface(mockCtrl)
+	mockMetadataGceFail.EXPECT().OnGCE().Return(false)
 
 	tcs := []testCase{
 		{
 			"Normal case without original startup script",
 			daisy.GetInstanceURI(testProject, testZone, testInstance),
 			false,
+			false,
+			"",
+			"",
+			testProject, testZone, testInstance,
+			mockMetadataGce,
 		},
 		{
 			"Normal case with original startup script",
 			daisy.GetInstanceURI(testProject, testZone, testInstanceWithStartupScript),
 			false,
+			false,
+			"",
+			"",
+			testProject, testZone, testInstanceWithStartupScript,
+			mockMetadataGce,
 		},
 		{
 			"Normal case with existing startup script backup",
 			daisy.GetInstanceURI(testProject, testZone, testInstanceWithExistingStartupScriptBackup),
 			false,
+			false,
+			"",
+			"",
+			testProject, testZone, testInstanceWithExistingStartupScriptBackup,
+			mockMetadataGce,
 		},
 		{
 			"No disk error",
 			daisy.GetInstanceURI(testProject, testZone, testInstanceNoDisk),
+			false,
 			true,
+			"",
+			"",
+			testProject, testZone, testInstanceNoDisk,
+			mockMetadataGce,
 		},
 		{
 			"License error",
 			daisy.GetInstanceURI(testProject, testZone, testInstanceNoLicense),
+			false,
 			true,
+			"",
+			"",
+			testProject, testZone, testInstanceNoLicense,
+			mockMetadataGce,
 		},
 		{
 			"OS disk error",
 			daisy.GetInstanceURI(testProject, testZone, testInstanceNoBootDisk),
+			false,
 			true,
+			"",
+			"",
+			testProject, testZone, testInstanceNoBootDisk,
+			mockMetadataGce,
 		},
 		{
 			"Instance doesn't exist",
 			daisy.GetInstanceURI(testProject, testZone, DNE),
+			false,
 			true,
+			"",
+			"",
+			testProject, testZone, DNE,
+			mockMetadataGce,
 		},
 		{
-			"Bad instance URI error",
+			"Bad instance flag error",
 			"bad/url",
 			true,
+			true,
+			"",
+			"",
+			testProject, testZone, "bad/url",
+			mockMetadataGce,
 		},
 		{
-			"No instance URI flag",
+			"No instance flag",
 			"",
 			true,
+			true,
+			"",
+			"",
+			testProject, testZone, "",
+			mockMetadataGce,
+		},
+		{
+			"Instance name without project",
+			testInstance,
+			true,
+			true,
+			"",
+			testZone2,
+			"", testZone2, testInstance,
+			mockMetadataGceFail,
+		},
+		{
+			"Instance name with fallback project (on GCE)",
+			testInstance,
+			false,
+			false,
+			"",
+			testZone2,
+			testProject2, testZone2, testInstance,
+			mockMetadataGce,
+		},
+		{
+			"Instance name without input zone",
+			testInstance,
+			true,
+			true,
+			testProject2,
+			"",
+			testProject2, testZone2, testInstance,
+			mockMetadataGce,
+		},
+		{
+			"Instance name with input project and zone",
+			testInstance,
+			false,
+			false,
+			testProject2,
+			testZone2,
+			testProject2, testZone2, testInstance,
+			mockMetadataGce,
+		},
+		{
+			"Override input project and zone",
+			daisy.GetInstanceURI(testProject, testZone, testInstance),
+			false,
+			false,
+			testProject2,
+			testZone2,
+			testProject, testZone, testInstance,
+			mockMetadataGce,
 		},
 	}
 
+	originalMGCE := mgce
+	defer func() {
+		mgce = originalMGCE
+	}()
+
 	for _, tc := range tcs {
 		derivedVars := derivedVars{}
+		mgce = tc.mgce
 
-		err := validateInstanceURI(tc.instanceURI, &derivedVars)
-		if !instanceURLRgx.Match([]byte(tc.instanceURI)) {
-			if err == nil {
-				t.Errorf("[%v]: Expect validateInstanceURI error but none.", tc.testName)
+		err := validateAndDeriveInstanceURI(tc.instance, &tc.inputProject, tc.inputZone, &derivedVars)
+		if err == nil {
+			if tc.expectURIError {
+				t.Errorf("[%v]: Expect validateAndDeriveInstanceURI error but none.", tc.testName)
+				continue
+			}
+			if !instanceURLRgx.Match([]byte(derivedVars.instanceURI)) {
+				t.Errorf("[%v]: Expect correct derivedVars.instanceURI format error but it's bad format %v.", tc.testName, derivedVars.instanceURI)
+				continue
+			}
+		} else {
+			if !tc.expectError {
+				t.Errorf("[%v]: Unexpected error when validating instance URI: %v", tc.testName, err)
 			}
 			continue
-		} else if err != nil {
-			t.Errorf("[%v]: Unexpected error when validating instance URI: %v", tc.testName, err)
-			continue
 		}
 
-		if tc.instanceURI != daisy.GetInstanceURI(derivedVars.project, derivedVars.zone, derivedVars.instanceName) {
-			t.Errorf("[%v]: Unexpected breakdown of instance URI. Actual project, zone, instanceName are  %v, %v, %v but they are from %v.",
-				tc.testName, derivedVars.project, derivedVars.zone, derivedVars.instanceName, tc.instanceURI)
+		if tc.expectProject != derivedVars.instanceProject || tc.expectZone != derivedVars.instanceZone || tc.expectInstanceName != derivedVars.instanceName {
+			t.Errorf("[%v]: Unexpected breakdown of instance URI. Actual project, zone, instanceName are %v, %v, %v while expect %v, %v, %v.",
+				tc.testName, derivedVars.instanceProject, derivedVars.instanceZone, derivedVars.instanceName,
+				tc.expectProject, tc.expectZone, tc.expectInstanceName)
+
+		}
+		if daisy.GetInstanceURI(tc.expectProject, tc.expectZone, tc.expectInstanceName) != derivedVars.instanceURI {
+			t.Errorf("[%v]: Unexpected instance URI. Actual: %v, while expect: %v.",
+				tc.testName, derivedVars.instanceURI, daisy.GetInstanceURI(tc.expectProject, tc.expectZone, tc.expectInstanceName))
 		}
 
-		err = validateInstance(&derivedVars, testSourceOS)
+		err = validateAndDeriveInstance(&derivedVars, testSourceOS)
 		if !tc.expectError {
 			if err != nil {
 				t.Errorf("[%v]: Unexpected error: %v", tc.testName, err)
 			} else {
-				if tc.instanceURI == testInstance {
-					if derivedVars.windowsStartupScriptURLBackup != nil {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackup: %v, expect: nil", tc.testName, derivedVars.windowsStartupScriptURLBackup)
+				if derivedVars.instanceName == testInstance {
+					if derivedVars.originalWindowsStartupScriptURL != nil {
+						t.Errorf("[%v]: Unexpected originalWindowsStartupScriptURL: %v, expect: nil", tc.testName, derivedVars.originalWindowsStartupScriptURL)
 					}
-					if derivedVars.windowsStartupScriptURLBackupExists {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackupExists: %v, expect: false", tc.testName, derivedVars.windowsStartupScriptURLBackupExists)
-					}
-				} else if tc.instanceURI == testInstanceWithStartupScript {
-					if derivedVars.windowsStartupScriptURLBackup == nil || *derivedVars.windowsStartupScriptURLBackup != testOriginalStartupScript {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackup: %v, expect: %v", tc.testName, derivedVars.windowsStartupScriptURLBackup, testOriginalStartupScript)
-					}
-					if !derivedVars.windowsStartupScriptURLBackupExists {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackupExists: %v, expect: true", tc.testName, derivedVars.windowsStartupScriptURLBackupExists)
-					}
-				} else if tc.instanceURI == testInstanceWithExistingStartupScriptBackup {
-					if derivedVars.windowsStartupScriptURLBackup != nil {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackup: %v, expect: nil", tc.testName, derivedVars.windowsStartupScriptURLBackup)
-					}
-					if !derivedVars.windowsStartupScriptURLBackupExists {
-						t.Errorf("[%v]: Unexpected windowsStartupScriptURLBackupExists: %v, expect: true", tc.testName, derivedVars.windowsStartupScriptURLBackupExists)
+				} else if derivedVars.instanceName == testInstanceWithStartupScript ||
+					derivedVars.instanceName == testInstanceWithExistingStartupScriptBackup {
+					if derivedVars.originalWindowsStartupScriptURL == nil || *derivedVars.originalWindowsStartupScriptURL != testOriginalStartupScript {
+						t.Errorf("[%v]: Unexpected originalWindowsStartupScriptURL: %v, expect: %v", tc.testName, derivedVars.originalWindowsStartupScriptURL, testOriginalStartupScript)
 					}
 				}
 			}
@@ -263,7 +383,7 @@ func TestValidateOSDisk(t *testing.T) {
 
 	for _, tc := range tcs {
 		derivedVars := derivedVars{}
-		err := validateOSDisk(tc.osDisk, &derivedVars)
+		err := validateAndDeriveOSDisk(tc.osDisk, &derivedVars)
 		if !tc.expectError {
 			if err != nil {
 				t.Errorf("[%v]: Unexpected error: %v", tc.testName, err)

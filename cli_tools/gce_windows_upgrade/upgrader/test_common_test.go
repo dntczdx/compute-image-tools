@@ -33,7 +33,9 @@ const DNE = "dne"
 var (
 	testWf                                      = "test-wf"
 	testProject                                 = "test-project"
+	testProject2                                = "test-project2"
 	testZone                                    = "test-zone"
+	testZone2                                   = "test-zone2"
 	testRegion                                  = "test-zo"
 	testDisk                                    = "test-disk"
 	testDiskDeviceName                          = "test-disk-device-name"
@@ -66,24 +68,26 @@ var (
 	testOriginalStartupScript                   = "original"
 )
 
-func initTest() *Upgrader {
+func initTest() *upgrader {
 	computeClient = newTestGCEClient()
-	return &Upgrader{
-		ClientID:               "test",
-		InstanceURI:            daisy.GetInstanceURI(testProject, testZone, testInstance),
-		SkipMachineImageBackup: false,
-		AutoRollback:           false,
-		SourceOS:               "windows-2008r2",
-		TargetOS:               "windows-2012r2",
-		ProjectPtr:             new(string),
-		Timeout:                "",
-		ScratchBucketGcsPath:   "",
-		Oauth:                  "",
-		Ce:                     "",
-		GcsLogsDisabled:        false,
-		CloudLogsDisabled:      false,
-		StdoutLogsDisabled:     false,
-		CurrentExecutablePath:  ".",
+	return &upgrader{
+		InputParams: &InputParams{
+			ClientID:               "test",
+			Instance:               daisy.GetInstanceURI(testProject, testZone, testInstance),
+			SkipMachineImageBackup: false,
+			AutoRollback:           false,
+			SourceOS:               "windows-2008r2",
+			TargetOS:               "windows-2012r2",
+			ProjectPtr:             new(string),
+			Timeout:                "",
+			ScratchBucketGcsPath:   "",
+			Oauth:                  "",
+			Ce:                     "",
+			GcsLogsDisabled:        false,
+			CloudLogsDisabled:      false,
+			StdoutLogsDisabled:     false,
+			CurrentExecutablePath:  ".",
+		},
 
 		ctx: context.Background(),
 	}
