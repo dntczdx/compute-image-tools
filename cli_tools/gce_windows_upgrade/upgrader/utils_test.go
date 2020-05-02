@@ -16,6 +16,8 @@ package upgrader
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestIsNewOSDiskAttached(t *testing.T) {
@@ -40,9 +42,7 @@ func TestIsNewOSDiskAttached(t *testing.T) {
 
 	for _, tc := range tcs {
 		attached := isNewOSDiskAttached(tc.project, tc.zone, tc.instanceName, tc.newOSDiskName)
-		if attached != tc.expectedAttached {
-			t.Errorf("[%v]: Expected attached status '%v' != actrual attached status '%v'", tc.testName, tc.expectedAttached, attached)
-		}
+		assert.Equalf(t, tc.expectedAttached, attached, "[test name: %v] Unexpected attach status.", tc.testName)
 	}
 }
 
@@ -65,8 +65,6 @@ func TestGetIntroHelpText(t *testing.T) {
 			},
 		}
 		_, err := getIntroHelpText(&u)
-		if err != nil {
-			t.Errorf("[%v]: Unexpected error: '%v'", tc.name, err)
-		}
+		assert.NoError(t, err, "[test name: %v]", tc.name)
 	}
 }

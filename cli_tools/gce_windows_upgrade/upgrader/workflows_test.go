@@ -19,6 +19,7 @@ import (
 
 	daisyutils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/daisy"
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGeneratePrepareWorkflow(t *testing.T) {
@@ -26,13 +27,12 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 		testName               string
 		populateFunc           func(*upgrader, *daisy.Workflow) error
 		instanceName           string
-		expectError            bool
 		skipMachineImageBackup bool
 	}
 
 	tcs := []testCase{
-		{"prepare", populatePrepareSteps, testInstance, false, true},
-		{"prepare with original startup script", populatePrepareSteps, testInstanceWithStartupScript, false, false},
+		{"prepare", populatePrepareSteps, testInstance, true},
+		{"prepare with original startup script", populatePrepareSteps, testInstanceWithStartupScript, false},
 	}
 
 	for _, tc := range tcs {
@@ -46,11 +46,7 @@ func TestGeneratePrepareWorkflow(t *testing.T) {
 		}
 
 		w, err := u.generateWorkflowWithSteps("test", DefaultTimeout, tc.populateFunc)
-		if tc.expectError && err == nil {
-			t.Errorf("[%v]: Expect an error but nothing happened.", tc.testName)
-		} else if !tc.expectError && err != nil {
-			t.Errorf("[%v]: Unexpected error: %v", tc.testName, err)
-		}
+		assert.NoError(t, err, "[test name: %v] Unexpected error.", tc.testName)
 
 		_, hasBackupMachineImageStep := w.Steps["backup-machine-image"]
 		if u.SkipMachineImageBackup && hasBackupMachineImageStep {
@@ -73,26 +69,23 @@ func TestGenerateStaticWorkflow(t *testing.T) {
 		testName     string
 		populateFunc func(*upgrader, *daisy.Workflow) error
 		instanceName string
-		expectError  bool
 	}
 
 	tcs := []testCase{
-		{"reboot", populateRebootSteps, testInstance, false},
-		{"cleanup", populateCleanupSteps, testInstance, false},
-		{"rollback", populateRollbackSteps, testInstanceWithStartupScript, false},
+		{"reboot", populateRebootSteps, testInstance},
+		{"cleanup", populateCleanupSteps, testInstance},
+		{"rollback", populateRollbackSteps, testInstanceWithStartupScript},
 	}
 	for sourceOS := range supportedSourceOSVersions {
 		tcs = append(tcs, testCase{
 			"upgrade-" + sourceOS,
 			upgradeSteps[sourceOS],
 			testInstance,
-			false,
 		})
 		tcs = append(tcs, testCase{
 			"retry-upgrade-" + sourceOS,
 			retryUpgradeSteps[sourceOS],
 			testInstanceWithStartupScript,
-			false,
 		})
 	}
 
@@ -107,11 +100,7 @@ func TestGenerateStaticWorkflow(t *testing.T) {
 		}
 
 		_, err = u.generateWorkflowWithSteps("test", DefaultTimeout, tc.populateFunc)
-		if tc.expectError && err == nil {
-			t.Errorf("[%v]: Expect an error but nothing happened.", tc.testName)
-		} else if !tc.expectError && err != nil {
-			t.Errorf("[%v]: Unexpected error: %v", tc.testName, err)
-		}
+		assert.NoError(t, err, "[test name: %v] Unexpected error.", tc.testName)
 	}
 }
 

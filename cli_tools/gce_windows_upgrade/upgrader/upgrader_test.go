@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/daisy"
+	"github.com/stretchr/testify/assert"
 )
 
 type TestUpgrader struct {
@@ -108,9 +109,7 @@ func TestUpgraderRunFailedOnInit(t *testing.T) {
 	tu.Oauth = "bad-oauth"
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	}
+	assert.EqualError(t, err, "Failed to create GCE client: error creating HTTP API client: cannot read credentials file: open bad-oauth: no such file or directory")
 }
 
 func TestUpgraderRunFailedOnValidateParams(t *testing.T) {
@@ -120,11 +119,7 @@ func TestUpgraderRunFailedOnValidateParams(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunFailedOnPrintUpgradeGuide(t *testing.T) {
@@ -134,11 +129,7 @@ func TestUpgraderRunFailedOnPrintUpgradeGuide(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunFailedOnPrepare(t *testing.T) {
@@ -151,11 +142,7 @@ func TestUpgraderRunFailedOnPrepare(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunFailedOnUpgrade(t *testing.T) {
@@ -168,11 +155,7 @@ func TestUpgraderRunFailedOnUpgrade(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunFailedOnReboot(t *testing.T) {
@@ -188,11 +171,7 @@ func TestUpgraderRunFailedOnReboot(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunFailedOnRetryUpgrade(t *testing.T) {
@@ -211,20 +190,14 @@ func TestUpgraderRunFailedOnRetryUpgrade(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	} else if err.Error() != "failed" {
-		t.Errorf("Error not thrown from expected function.")
-	}
+	assert.EqualError(t, err, "failed")
 }
 
 func TestUpgraderRunSuccessWithoutReboot(t *testing.T) {
 	tu := initTestUpgrader(t)
 
 	_, err := run(tu)
-	if err != nil {
-		t.Errorf("Unexpected error '%v'.", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestUpgraderRunSuccessWithReboot(t *testing.T) {
@@ -240,9 +213,7 @@ func TestUpgraderRunSuccessWithReboot(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err != nil {
-		t.Errorf("Unexpected error '%v'.", err)
-	}
+	assert.NoError(t, err)
 }
 
 func TestUpgraderRunFailedWithAutoRollback(t *testing.T) {
@@ -265,12 +236,8 @@ func TestUpgraderRunFailedWithAutoRollback(t *testing.T) {
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	}
-	if !rollbackExecuted {
-		t.Errorf("Rollback not executed.")
-	}
+	assert.EqualError(t, err, "failed")
+	assert.True(t, rollbackExecuted, "Rollback not executed.")
 }
 
 func TestUpgraderRunFailedWithAutoRollbackFailed(t *testing.T) {
@@ -279,42 +246,34 @@ func TestUpgraderRunFailedWithAutoRollbackFailed(t *testing.T) {
 		// Test workaround: let newOSDiskName to be the same as current disk name
 		// in order to trigger auto rollback.
 		tu.newOSDiskName = testDisk
-		return nil, fmt.Errorf("failed")
+		return nil, fmt.Errorf("failed1")
 	}
 	tu.AutoRollback = true
 	rollbackExecuted := false
 	tu.rollbackFn = func() (*daisy.Workflow, error) {
 		rollbackExecuted = true
-		return nil, fmt.Errorf("failed")
+		return nil, fmt.Errorf("failed2")
 	}
 
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	}
-	if !rollbackExecuted {
-		t.Errorf("Rollback not executed.")
-	}
+	assert.EqualError(t, err, "failed1")
+	assert.True(t, rollbackExecuted, "Rollback not executed.")
 }
 
 func TestUpgraderRunFailedWithAutoRollbackWithoutNewOSDiskAttached(t *testing.T) {
 	tu := initTestUpgrader(t)
 	tu.prepareFn = func() (*daisy.Workflow, error) {
-		return nil, fmt.Errorf("failed")
+		return nil, fmt.Errorf("failed1")
 	}
 	tu.AutoRollback = true
 	cleanupExecuted := false
 	tu.cleanupFn = func() (*daisy.Workflow, error) {
 		cleanupExecuted = true
-		return nil, fmt.Errorf("failed")
+		return nil, fmt.Errorf("failed2")
 	}
 	_, err := run(tu)
-	if err == nil {
-		t.Errorf("Expect error but none.")
-	}
-	if !cleanupExecuted {
-		t.Errorf("Cleanup not executed.")
-	}
+	assert.EqualError(t, err, "failed1")
+	assert.True(t, cleanupExecuted, "Cleanup not executed.")
 }
 
 func initTestUpgrader(t *testing.T) *TestUpgrader {
