@@ -26,6 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"
@@ -316,13 +317,11 @@ func verifyImportedImage(ctx context.Context, testCase *junitxml.TestCase,
 	logger.Printf("Image '%v' exists! Import success.", imageName)
 
 	if expectedFamily != "" && image.Family != expectedFamily {
-		testCase.WriteFailure("Image '%v' family expect: %v, actual: %v", imageName, expectedFamily, image.Family)
-		logger.Printf("Image '%v' family expect: %v, actual: %v", imageName, expectedFamily, image.Family)
+		utils.Failure(testCase, logger, fmt.Sprintf("Image '%v' family expect: %v, actual: %v", imageName, expectedFamily, image.Family))
 	}
 
 	if expectedDescription != "" && image.Description != expectedDescription {
-		testCase.WriteFailure("Image '%v' description expect: %v, actual: %v", imageName, expectedDescription, image.Description)
-		logger.Printf("Image '%v' description expect: %v, actual: %v", imageName, expectedDescription, image.Description)
+		utils.Failure(testCase, logger, fmt.Sprintf("Image '%v' description expect: %v, actual: %v", imageName, expectedDescription, image.Description))
 	}
 
 	if expectedLabels != nil {
@@ -331,8 +330,7 @@ func verifyImportedImage(ctx context.Context, testCase *junitxml.TestCase,
 			imageLabels = append(imageLabels, k+"="+v)
 		}
 		if !contains(imageLabels, expectedLabels) {
-			testCase.WriteFailure("Image '%v' labels expect: %v, actual: %v", imageName, strings.Join(expectedLabels, ","), strings.Join(imageLabels, ","))
-			logger.Printf("Image '%v' labels expect: %v, actual: %v", imageName, strings.Join(expectedLabels, ","), strings.Join(imageLabels, ","))
+			utils.Failure(testCase, logger, fmt.Sprintf("Image '%v' labels expect: %v, actual: %v", imageName, strings.Join(expectedLabels, ","), strings.Join(imageLabels, ",")))
 		}
 	}
 

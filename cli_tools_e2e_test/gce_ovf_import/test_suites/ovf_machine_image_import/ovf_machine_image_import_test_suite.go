@@ -30,6 +30,7 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
@@ -269,18 +270,13 @@ func runOVFMachineImageImportTest(ctx context.Context, args []string, testType c
 	}
 }
 
-func failure(testCase *junitxml.TestCase, logger *log.Logger, msg string) {
-	testCase.WriteFailure(msg)
-	logger.Printf(msg)
-}
-
 func verifyImportedMachineImage(
 	ctx context.Context, testCase *junitxml.TestCase, testProjectConfig *testconfig.Project,
 	logger *log.Logger, props *ovfMachineImageImportTestProperties) {
 
 	client, err := daisyCompute.NewClient(ctx)
 	if err != nil {
-		failure(testCase, logger, fmt.Sprintf("Error creating client: %v", err))
+		utils.Failure(testCase, logger, fmt.Sprintf("Error creating client: %v", err))
 		return
 	}
 
@@ -290,7 +286,7 @@ func verifyImportedMachineImage(
 	instance, err := computeUtils.CreateInstanceBeta(
 		ctx, testProjectConfig.TestProjectID, props.zone, testInstanceName, props.isWindows, props.machineImageName)
 	if err != nil {
-		failure(testCase, logger, fmt.Sprintf("Error when creating test instance `%v` from machine image '%v': %v", testInstanceName, props.machineImageName, err))
+		utils.Failure(testCase, logger, fmt.Sprintf("Error when creating test instance `%v` from machine image '%v': %v", testInstanceName, props.machineImageName, err))
 		return
 	}
 
@@ -344,7 +340,7 @@ func verifyImportedMachineImage(
 	}
 
 	if !strings.HasSuffix(instance.Zone, props.zone) {
-		failure(testCase, logger, fmt.Sprintf("Instance zone `%v` doesn't match requested zone `%v`",
+		utils.Failure(testCase, logger, fmt.Sprintf("Instance zone `%v` doesn't match requested zone `%v`",
 			instance.Zone, props.zone))
 		return
 	}

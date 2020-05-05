@@ -1,4 +1,4 @@
-module github.com/GoogleCloudPlatform/compute-image-tools/gce_image_import_export_tests
+module github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test
 
 go 1.13
 

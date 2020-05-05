@@ -21,7 +21,7 @@ import (
 	"regexp"
 	"sync"
 
-	windowsupgradetestsuite "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/gce_image_import_export/test_suites/windows_upgrade"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/gce_windows_upgrade/test_suites/windows_upgrade"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"
@@ -29,7 +29,7 @@ import (
 
 func main() {
 	windowsUpgradeTestSuccess := e2etestutils.RunTestsAndOutput([]func(context.Context, *sync.WaitGroup, chan *junitxml.TestSuite, *log.Logger,
-		*regexp.Regexp, *regexp.Regexp, *testconfig.Project){windowsupgradetestsuite.TestSuite},
+		*regexp.Regexp, *regexp.Regexp, *testconfig.Project){testsuite.TestSuite},
 		"[WindowsUpgradeTests]")
 	if !windowsUpgradeTestSuccess {
 		os.Exit(1)

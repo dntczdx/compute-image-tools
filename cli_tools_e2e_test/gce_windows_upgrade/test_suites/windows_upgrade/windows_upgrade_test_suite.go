@@ -12,8 +12,8 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-// Package windowsupgrade contains e2e tests for gce_windows_upgrade
-package windowsupgradetestsuite
+// Package testsuite contains e2e tests for gce_windows_upgrade
+package testsuite
 
 import (
 	"context"
@@ -23,7 +23,9 @@ import (
 	"sync"
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
+	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"
@@ -31,6 +33,15 @@ import (
 
 const (
 	testSuiteName = "WindowsUpgradeTests"
+	standardImage = "projects/windows-cloud/global/images/windows-server-2008-r2-dc-v20200114"
+)
+
+var (
+	cmds = map[clitoolstestutils.CLITestType]string{
+		clitoolstestutils.Wrapper:                   "./gce_windows_upgrade",
+		clitoolstestutils.GcloudProdWrapperLatest:   "gcloud",
+		clitoolstestutils.GcloudLatestWrapperLatest: "gcloud",
+	}
 )
 
 // TestSuite contains implementations of the e2e tests.
@@ -65,23 +76,26 @@ func runWindowsUpgradeNormalCase(ctx context.Context, testCase *junitxml.TestCas
 	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
 
 	suffix := path.RandString(5)
+	instanceName := fmt.Sprintf("projects/%v/zones/%v/instances/test-upgrade-%v",
+		testProjectConfig.TestProjectID, testProjectConfig.TestZone, suffix)
 
 	argsMap := map[clitoolstestutils.CLITestType][]string{
 		clitoolstestutils.Wrapper: {
-			"-client-id=e2e",
+			"-client_id=e2e",
 			fmt.Sprintf("-source-os=%v", "windows-2008r2"),
 			fmt.Sprintf("-target-os=%v", "windows-2012r2"),
-			fmt.Sprintf("-instance=projects/%v/zones/%v/instances/test-upgrade-%v",
-				testProjectConfig.TestProjectID, testProjectConfig.TestZone, suffix),
+			fmt.Sprintf("-instance=%v", instanceName),
 		},
 	}
-	runTest(ctx, argsMap[testType], testType, testProjectConfig, imageName, logger, testCase)
+	runTest(ctx, standardImage, argsMap[testType], testType, testProjectConfig, instanceName, true, logger, testCase)
 }
 
 func runWindowsUpgradeWithRichParamsAndLatestInstallMedia(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
 		testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
 
 	suffix := path.RandString(5)
+	instanceName := fmt.Sprintf("projects/%v/zones/%v/instances/test-upgrade-%v",
+		testProjectConfig.TestProjectID, testProjectConfig.TestZone, suffix)
 
 	// TODO: switch to the latest install media when it's ready
 	argsMap := map[clitoolstestutils.CLITestType][]string{
@@ -89,8 +103,7 @@ func runWindowsUpgradeWithRichParamsAndLatestInstallMedia(ctx context.Context, t
 			"-client_id=e2e",
 			fmt.Sprintf("-source-os=%v", "windows-2008r2"),
 			fmt.Sprintf("-target-os=%v", "windows-2012r2"),
-			fmt.Sprintf("-instance=projects/%v/zones/%v/instances/test-upgrade-%v",
-				testProjectConfig.TestProjectID, testProjectConfig.TestZone, suffix),
+			fmt.Sprintf("-instance=%v", instanceName),
 			fmt.Sprintf("-skip-machine-image-backup"),
 			fmt.Sprintf("-auto-rollback"),
 			fmt.Sprintf("-timeout=2h"),
@@ -98,34 +111,87 @@ func runWindowsUpgradeWithRichParamsAndLatestInstallMedia(ctx context.Context, t
 			fmt.Sprintf("-zone=%v", "fake-zone"),
 		},
 	}
-	runTest(ctx, argsMap[testType], testType, testProjectConfig, imageName, logger, testCase)
+	runTest(ctx, standardImage, argsMap[testType], testType, testProjectConfig, instanceName, true, logger, testCase)
 }
 
-func runTest(ctx context.Context, args []string, testType clitoolstestutils.CLITestType,
-	testProjectConfig *testconfig.Project, imageName string, logger *log.Logger, testCase *junitxml.TestCase) {
+func runTest(ctx context.Context, image string, args []string, testType clitoolstestutils.CLITestType,
+	testProjectConfig *testconfig.Project, instanceName string, expectSuccess bool, logger *log.Logger, testCase *junitxml.TestCase) {
 
-	// gcloud is not ready yet. However, it's harmless to keep the command name here.
-	cmds := map[clitoolstestutils.CLITestType]string{
-		clitoolstestutils.Wrapper:                   "./gce_windows_upgrade",
-		clitoolstestutils.GcloudProdWrapperLatest:   "gcloud",
-		clitoolstestutils.GcloudLatestWrapperLatest: "gcloud",
+	// create the test instance
+	if !clitoolstestutils.RunTestCommand("gcloud", []string{
+		"compute", "instances", "create", fmt.Sprintf("--image=%v", image),
+		"--boot-disk-type=pd-ssd", "--machine-type=n1-standard-4", fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
+		fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID), instanceName,
+	}, logger, testCase) {
+		return
 	}
 
 	if clitoolstestutils.RunTestForTestType(cmds[testType], args, testType, logger, testCase) {
-		verifyUpgradedInstance(ctx, testCase, testProjectConfig, imageName, logger)
+		verifyUpgradedInstance(ctx, testCase, testProjectConfig, instanceName, expectSuccess, logger)
 	}
 }
 
 func verifyUpgradedInstance(ctx context.Context, testCase *junitxml.TestCase,
-	testProjectConfig *testconfig.Project, imageName string, logger *log.Logger) {
+	testProjectConfig *testconfig.Project, instanceName string, expectSuccess bool, logger *log.Logger) {
 
-	// get instance object
+	// TODO: implement the actual verification
 
+	_, err := daisyCompute.NewClient(ctx)
+	if err != nil {
+		utils.Failure(testCase, logger, fmt.Sprintf("Error creating client: %v", err))
+		return
+	}
+	logger.Printf("Verifying upgraded instance...")
+	instance, err := computeUtils.CreateInstanceObject(ctx, testProjectConfig.TestProjectID, testProjectConfig.TestZone, instanceName, true)
+	if err != nil {
+		utils.Failure(testCase, logger, fmt.Sprintf("Failed to fetch instance object for %v: $v", instanceName, err))
+		return
+	}
+
+	defer func() {
+		logger.Printf("Deleting instance `%v`", instanceName)
+		if err := instance.Cleanup(); err != nil {
+			logger.Printf("Instance '%v' failed to clean up: %v", instanceName, err)
+		} else {
+			logger.Printf("Instance '%v' cleaned up.", instanceName)
+		}
+		// cleanup machine image
+		// cleanup snapshot
+	}()
+
+
+	// verify license
+	hasBootDisk := false
+	for _, disk := range instance.Disks {
+		if !disk.Boot {
+			continue
+		}
+		if expectSuccess {
+			if !containsString(disk.Licenses, "projects/windows-cloud/global/licenses/windows-server-2012-r2-dc-in-place-upgrade") {
+				utils.Failure(testCase, logger, "Additional license not found.")
+			}
+		} else {
+			// TODO: expect what for failed case?
+		}
+		hasBootDisk = true
+	}
+	if !hasBootDisk {
+		utils.Failure(testCase, logger, "Boot disk not found.")
+		return
+	}
 	// verify startup script & backup
-	// verify failure reason
+	// verify success / failure reason
 
 	// set startup script
 	// restart, verify OS version
 
-	// delete instance
+}
+
+func containsString(strs []string, s string) bool {
+	for _, str := range strs {
+		if str == s {
+			return true
+		}
+	}
+	return false
 }

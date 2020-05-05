@@ -29,6 +29,7 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
@@ -346,25 +347,20 @@ func runOVFInstanceImportTest(ctx context.Context, args []string, testType clito
 	}
 }
 
-func failure(testCase *junitxml.TestCase, logger *log.Logger, msg string) {
-	testCase.WriteFailure(msg)
-	logger.Printf(msg)
-}
-
 func verifyImportedInstance(
 	ctx context.Context, testCase *junitxml.TestCase, testProjectConfig *testconfig.Project,
 	logger *log.Logger, props *ovfInstanceImportTestProperties) {
 
 	client, err := daisyCompute.NewClient(ctx)
 	if err != nil {
-		failure(testCase, logger, fmt.Sprintf("Error creating client: %v", err))
+		utils.Failure(testCase, logger, fmt.Sprintf("Error creating client: %v", err))
 		return
 	}
 
 	logger.Printf("Verifying imported instance...")
 	instance, err := computeUtils.CreateInstanceObject(ctx, testProjectConfig.TestProjectID, props.zone, props.instanceName, props.isWindows)
 	if err != nil {
-		failure(testCase, logger, fmt.Sprintf("Image '%v' doesn't exist after import: %v", props.instanceName, err))
+		utils.Failure(testCase, logger, fmt.Sprintf("Image '%v' doesn't exist after import: %v", props.instanceName, err))
 		return
 	}
 
@@ -411,7 +407,7 @@ func verifyImportedInstance(
 	}
 
 	if !strings.HasSuffix(instance.Zone, props.zone) {
-		failure(testCase, logger, fmt.Sprintf("Instance zone `%v` doesn't match requested zone `%v`",
+		utils.Failure(testCase, logger, fmt.Sprintf("Instance zone `%v` doesn't match requested zone `%v`",
 			instance.Zone, props.zone))
 		return
 	}
