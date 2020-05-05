@@ -13,7 +13,7 @@
 //  limitations under the License.
 
 // Package windowsupgrade contains e2e tests for gce_windows_upgrade
-package windowsupgrade
+package windowsupgradetestsuite
 
 import (
 	"context"
@@ -23,8 +23,7 @@ import (
 	"sync"
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/gce_windows_upgrade/upgrader"
-	"github.com/GoogleCloudPlatform/compute-image-tools/gce_image_import_export_tests/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"

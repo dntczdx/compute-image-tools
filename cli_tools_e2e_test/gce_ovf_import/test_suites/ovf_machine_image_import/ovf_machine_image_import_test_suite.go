@@ -29,7 +29,7 @@ import (
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
-	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/gce_ovf_import_tests/compute"
+	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
 	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
