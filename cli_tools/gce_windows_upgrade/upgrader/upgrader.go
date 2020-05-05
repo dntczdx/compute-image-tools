@@ -27,7 +27,7 @@ import (
 
 // Parameter key shared with external packages
 const (
-	ClientIDFlagKey = "client_id"
+	ClientIDFlagKey = "client-id"
 	DefaultTimeout  = "90m"
 )
 
