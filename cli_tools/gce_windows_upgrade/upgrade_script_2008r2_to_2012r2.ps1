@@ -38,8 +38,7 @@ try {
     }
   }
   if (!$script:install_media_drive) {
-    $partitions = Get-Disk 1 | Get-Partition
-    throw "No install media found on any partition: $partitions"
+    throw "No install media found."
   }
   Write-Host "Detected install media folder drive letter: $script:install_media_drive"
 
