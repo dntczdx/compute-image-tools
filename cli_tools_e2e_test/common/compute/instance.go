@@ -122,6 +122,18 @@ func WaitForSerialOutput(match string, port int64, interval, timeout time.Durati
 	}
 }
 
+func SetMetadata(ctx context.Context, project, zone, name, key, value string, isWindows bool) (*Instance, error) {
+	i, err := CreateInstanceObject(ctx, project, zone, name, isWindows)
+	if err != nil {
+		return nil, err
+	}
+	err = i.Client.SetInstanceMetadata(i.Project, i.Zone,
+		i.Name, &api.Metadata{Items: []*api.MetadataItems{BuildInstanceMetadataItem(
+			key, value)},
+			Fingerprint: i.Metadata.Fingerprint})
+	return i, err
+}
+
 // CreateInstanceObject creates an image object to be operated by GA API client
 func CreateInstanceObject(ctx context.Context, project string, zone string, name string, isWindows bool) (*Instance, error) {
 	client, err := daisyCompute.NewClient(ctx)

@@ -29,9 +29,8 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
-	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
-	clitoolstestutils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
+	utils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	testconfig "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"
 )
@@ -42,10 +41,10 @@ const (
 )
 
 var (
-	cmds = map[clitoolstestutils.CLITestType]string{
-		clitoolstestutils.Wrapper:                   "./gce_ovf_import",
-		clitoolstestutils.GcloudProdWrapperLatest:   "gcloud",
-		clitoolstestutils.GcloudLatestWrapperLatest: "gcloud",
+	cmds = map[utils.CLITestType]string{
+		utils.Wrapper:                   "./gce_ovf_import",
+		utils.GcloudProdWrapperLatest:   "gcloud",
+		utils.GcloudLatestWrapperLatest: "gcloud",
 	}
 )
 
@@ -68,13 +67,13 @@ func TestSuite(
 	logger *log.Logger, testSuiteRegex, testCaseRegex *regexp.Regexp,
 	testProjectConfig *testconfig.Project) {
 
-	testsMap := map[clitoolstestutils.CLITestType]map[*junitxml.TestCase]func(
-		context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, clitoolstestutils.CLITestType){}
+	testsMap := map[utils.CLITestType]map[*junitxml.TestCase]func(
+		context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, utils.CLITestType){}
 
-	testTypes := []clitoolstestutils.CLITestType{
-		clitoolstestutils.Wrapper,
-		clitoolstestutils.GcloudProdWrapperLatest,
-		clitoolstestutils.GcloudLatestWrapperLatest,
+	testTypes := []utils.CLITestType{
+		utils.Wrapper,
+		utils.GcloudProdWrapperLatest,
+		utils.GcloudLatestWrapperLatest,
 	}
 	for _, testType := range testTypes {
 		instanceImportUbuntu3DisksTestCase := junitxml.NewTestCase(
@@ -99,7 +98,7 @@ func TestSuite(
 			testSuiteName, fmt.Sprintf("[%v][OVFInstanceImport] %v", testType, "Test network setting (path)"))
 
 		testsMap[testType] = map[*junitxml.TestCase]func(
-			context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, clitoolstestutils.CLITestType){}
+			context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, utils.CLITestType){}
 		testsMap[testType][instanceImportUbuntu3DisksTestCase] = runOVFInstanceImportUbuntu3Disks
 		testsMap[testType][instanceImportCentos68] = runOVFInstanceImportCentos68
 		testsMap[testType][instanceImportWindows2012R2TwoDisks] = runOVFInstanceImportWindows2012R2TwoDisks
@@ -112,12 +111,12 @@ func TestSuite(
 		testsMap[testType][instanceImportNetworkSettingsPath] = runOVFInstanceImportNetworkSettingsPath
 	}
 
-	clitoolstestutils.CLITestSuite(ctx, tswg, testSuites, logger, testSuiteRegex, testCaseRegex,
+	utils.CLITestSuite(ctx, tswg, testSuites, logger, testSuiteRegex, testCaseRegex,
 		testProjectConfig, testSuiteName, testsMap)
 }
 
 func runOVFInstanceImportUbuntu3Disks(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -134,7 +133,7 @@ func runOVFInstanceImportUbuntu3Disks(ctx context.Context, testCase *junitxml.Te
 }
 
 func runOVFInstanceImportCentos68(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -152,7 +151,7 @@ func runOVFInstanceImportCentos68(ctx context.Context, testCase *junitxml.TestCa
 }
 
 func runOVFInstanceImportWindows2012R2TwoDisks(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -171,7 +170,7 @@ func runOVFInstanceImportWindows2012R2TwoDisks(ctx context.Context, testCase *ju
 }
 
 func runOVFInstanceImportWindows2016(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -190,7 +189,7 @@ func runOVFInstanceImportWindows2016(ctx context.Context, testCase *junitxml.Tes
 }
 
 func runOVFInstanceImportWindows2008R2FourNICs(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -208,7 +207,7 @@ func runOVFInstanceImportWindows2008R2FourNICs(ctx context.Context, testCase *ju
 }
 
 func runOVFInstanceImportDebian9(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	// no startup script as this OVA has issues running it (possibly due to no SSH allowed)
@@ -225,7 +224,7 @@ func runOVFInstanceImportDebian9(ctx context.Context, testCase *junitxml.TestCas
 }
 
 func runOVFInstanceImportUbuntu16FromVirtualBox(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -243,7 +242,7 @@ func runOVFInstanceImportUbuntu16FromVirtualBox(ctx context.Context, testCase *j
 }
 
 func runOVFInstanceImportUbuntu16FromAWS(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -258,7 +257,7 @@ func runOVFInstanceImportUbuntu16FromAWS(ctx context.Context, testCase *junitxml
 }
 
 func runOVFInstanceImportNetworkSettingsName(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	props := &ovfInstanceImportTestProperties{
@@ -278,7 +277,7 @@ func runOVFInstanceImportNetworkSettingsName(ctx context.Context, testCase *juni
 }
 
 func runOVFInstanceImportNetworkSettingsPath(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-	testProjectConfig *testconfig.Project, testType clitoolstestutils.CLITestType) {
+	testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	suffix := path.RandString(5)
 	region, _ := paramhelper.GetRegion(testProjectConfig.TestZone)
@@ -298,7 +297,7 @@ func runOVFInstanceImportNetworkSettingsPath(ctx context.Context, testCase *juni
 	runOVFInstanceImportTest(ctx, buildTestArgs(props, testProjectConfig)[testType], testType, testProjectConfig, logger, testCase, props)
 }
 
-func buildTestArgs(props *ovfInstanceImportTestProperties, testProjectConfig *testconfig.Project) map[clitoolstestutils.CLITestType][]string {
+func buildTestArgs(props *ovfInstanceImportTestProperties, testProjectConfig *testconfig.Project) map[utils.CLITestType][]string {
 	gcloudArgs := []string{
 		"beta", "compute", "instances", "import", props.instanceName, "--quiet",
 		"--docker-image-tag=latest",
@@ -330,19 +329,19 @@ func buildTestArgs(props *ovfInstanceImportTestProperties, testProjectConfig *te
 		wrapperArgs = append(wrapperArgs, fmt.Sprintf("-subnet=%v", props.subnet))
 	}
 
-	argsMap := map[clitoolstestutils.CLITestType][]string{
-		clitoolstestutils.Wrapper:                   wrapperArgs,
-		clitoolstestutils.GcloudProdWrapperLatest:   gcloudArgs,
-		clitoolstestutils.GcloudLatestWrapperLatest: gcloudArgs,
+	argsMap := map[utils.CLITestType][]string{
+		utils.Wrapper:                   wrapperArgs,
+		utils.GcloudProdWrapperLatest:   gcloudArgs,
+		utils.GcloudLatestWrapperLatest: gcloudArgs,
 	}
 	return argsMap
 }
 
-func runOVFInstanceImportTest(ctx context.Context, args []string, testType clitoolstestutils.CLITestType,
+func runOVFInstanceImportTest(ctx context.Context, args []string, testType utils.CLITestType,
 	testProjectConfig *testconfig.Project, logger *log.Logger, testCase *junitxml.TestCase,
 	props *ovfInstanceImportTestProperties) {
 
-	if clitoolstestutils.RunTestForTestType(cmds[testType], args, testType, logger, testCase) {
+	if utils.RunTestForTestType(cmds[testType], args, testType, logger, testCase) {
 		verifyImportedInstance(ctx, testCase, testProjectConfig, logger, props)
 	}
 }
