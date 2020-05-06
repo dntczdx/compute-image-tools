@@ -47,6 +47,15 @@ func (i *Instance) Cleanup() error {
 	return i.Client.DeleteInstance(i.Project, i.Zone, i.Name)
 }
 
+// RestartWithScript restarts the instance with given startup script.
+func (i *Instance) RestartWithScript(script string) error {
+	err := i.Client.StopInstance(i.Project, i.Zone, i.Name)
+	if err != nil {
+		return err
+	}
+	return i.StartWithScript(script)
+}
+
 // StartWithScript starts the instance with given startup script.
 func (i *Instance) StartWithScript(script string) error {
 	startupScriptKey := "startup-script"

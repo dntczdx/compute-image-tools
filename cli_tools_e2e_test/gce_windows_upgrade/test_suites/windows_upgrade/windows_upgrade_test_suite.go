@@ -213,7 +213,7 @@ func runTest(ctx context.Context, image string, args []string, testType utils.CL
 					utils.Failure(testCase, logger, fmt.Sprintf("Failed to fetch instance object for %v: %v", instanceName, err))
 					return
 				}
-				expectedOutput := "Running upgrade..."
+				expectedOutput := "Beginning upgrade startup script."
 				logger.Printf("[%v] Waiting for `%v` in instance serial console.", instanceName,
 					expectedOutput)
 				if err := instance.WaitForSerialOutput(
@@ -280,9 +280,23 @@ func verifyUpgradedInstance(ctx context.Context, logger *log.Logger, testCase *j
 		if !disk.Boot {
 			continue
 		}
+		containsAdditionalLicense := containsString(disk.Licenses, "projects/windows-cloud/global/licenses/windows-server-2012-r2-dc-in-place-upgrade")
+		// success case
 		if expectSuccess {
-			if !containsString(disk.Licenses, "projects/windows-cloud/global/licenses/windows-server-2012-r2-dc-in-place-upgrade") {
+			if !containsAdditionalLicense {
 				utils.Failure(testCase, logger, "Additional license not found.")
+			}
+		} else {
+			if autoRollback {
+				// rollback case
+				if !containsAdditionalLicense {
+					utils.Failure(testCase, logger, "Additional license found after rollback.")
+				}
+			} else {
+				// cleanup case
+				if containsAdditionalLicense {
+					utils.Failure(testCase, logger, "Additional license not found.")
+				}
 			}
 		}
 		hasBootDisk = true
@@ -309,26 +323,9 @@ func verifyUpgradedInstance(ctx context.Context, logger *log.Logger, testCase *j
 		utils.Failure(testCase, logger, fmt.Sprintf("Unexpected startup script URL backup: %v", windowsStartupScriptURLBackup))
 	}
 
-	// verify cleanup / rollback
-	if autoRollback {
-		// original boot disk name == instance name by default
-		originalOSDisk, err := instance.Client.GetDisk(testProjectConfig.TestProjectID, testProjectConfig.TestZone, instanceName)
-		if err != nil {
-			utils.Failure(testCase, logger, "Failed to get original OS disk.")
-		}
-		if len(originalOSDisk.Users) == 0 {
-			utils.Failure(testCase, logger, "Original OS disk didn't get rollback.")
-		}
-	}
-	for _, d := range instance.Disks {
-		if d.Source == "projects/compute-image-tools/global/images/family/windows-install-media" {
-			utils.Failure(testCase, logger, "Install media is not cleaned up.")
-		}
-	}
-
-	// verify OS version by startup script
 	if expectSuccess {
-		err = instance.StartWithScript("$ver=[System.Environment]::OSVersion.Version\n" +
+		// verify OS version by startup script
+		err = instance.RestartWithScript("$ver=[System.Environment]::OSVersion.Version\n" +
 			"Write-Host \"windows_upgrade_verify_version=$($ver.Major).$($ver.Minor)\"")
 		if err != nil {
 			testCase.WriteFailure("Error starting instance `%v` with script: `%v`", instanceName, err)
@@ -340,6 +337,23 @@ func verifyUpgradedInstance(ctx context.Context, logger *log.Logger, testCase *j
 		if err := instance.WaitForSerialOutput(
 			expectedOutput, 1, 15*time.Second, 15*time.Minute); err != nil {
 			testCase.WriteFailure("Error during validation: %v", err)
+		}
+	} else {
+		// verify cleanup / rollback
+		if autoRollback {
+			// original boot disk name == instance name by default
+			originalOSDisk, err := instance.Client.GetDisk(testProjectConfig.TestProjectID, testProjectConfig.TestZone, instanceName)
+			if err != nil {
+				utils.Failure(testCase, logger, "Failed to get original OS disk.")
+			}
+			if len(originalOSDisk.Users) == 0 {
+				utils.Failure(testCase, logger, "Original OS disk didn't get rollback.")
+			}
+		}
+		for _, d := range instance.Disks {
+			if d.Source == "projects/compute-image-tools/global/images/family/windows-install-media" {
+				utils.Failure(testCase, logger, "Install media is not cleaned up.")
+			}
 		}
 	}
 }
