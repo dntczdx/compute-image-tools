@@ -439,21 +439,11 @@ func populateRollbackSteps(u *upgrader, w *daisy.Workflow) error {
 		Instances: []string{u.instanceURI},
 	}
 
-	stepDeleteNewOSDisk, err := daisyutils.NewStep(w, "delete-new-os-disk", stepStartInstance)
+	stepDeleteNewOSDiskAndInstallMediaDisk, err := daisyutils.NewStep(w, "delete-new-os-disk-and-install-media-disk", stepStartInstance)
 	if err != nil {
 		return err
 	}
-	stepDeleteNewOSDisk.DeleteResources = &daisy.DeleteResources{
-		Disks: []string{
-			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.newOSDiskName),
-		},
-	}
-
-	stepDeleteUpgradeDisks, err := daisyutils.NewStep(w, "delete-install-media-disk", stepStartInstance)
-	if err != nil {
-		return err
-	}
-	stepDeleteUpgradeDisks.DeleteResources = &daisy.DeleteResources{
+	stepDeleteNewOSDiskAndInstallMediaDisk.DeleteResources = &daisy.DeleteResources{
 		Disks: []string{
 			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.newOSDiskName),
 			daisyutils.GetDiskURI(u.instanceProject, u.instanceZone, u.installMediaDiskName),
