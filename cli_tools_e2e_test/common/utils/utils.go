@@ -239,5 +239,5 @@ func RunTestForTestType(cmd string, args []string, testType CLITestType, logger 
 // Failure logs failure message to both test case output and logger.
 func Failure(testCase *junitxml.TestCase, logger *log.Logger, msg string) {
 	testCase.WriteFailure(msg)
-	logger.Printf(msg)
+	logger.Printf("[%v] %v", testCase.Name, msg)
 }
