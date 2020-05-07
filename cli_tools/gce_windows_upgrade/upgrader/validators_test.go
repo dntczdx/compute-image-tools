@@ -41,7 +41,7 @@ func TestValidateParams(t *testing.T) {
 
 	u = initTest()
 	u.ClientID = ""
-	tcs = append(tcs, testCase{"No client id", u, "The flag -client_id must be provided", DefaultTimeout})
+	tcs = append(tcs, testCase{"No client id", u, "The flag -client-id must be provided", DefaultTimeout})
 
 	u = initTest()
 	u.SourceOS = "android"

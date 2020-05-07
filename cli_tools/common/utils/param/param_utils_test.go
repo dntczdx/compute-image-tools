@@ -17,6 +17,7 @@ package param
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"testing"
 
 	"cloud.google.com/go/storage"
@@ -66,6 +67,8 @@ func TestGetKeys(t *testing.T) {
 
 	for _, test := range tests {
 		keys := GetKeys(test.input)
+		sort.Strings(keys)
+		sort.Strings(test.want)
 		if !reflect.DeepEqual(keys, test.want) {
 			t.Errorf("[%v] Expected keys '%v' != actual keys '%v'", test.name, test.want, keys)
 		}
