@@ -30,6 +30,18 @@ try {
     throw "It's not windows 2008r2!"
   }
 
+  # bring all disks online to ensure install media is accessible
+  $Disks = Get-WmiObject Win32_DiskDrive
+  foreach ($Disk in $Disks)
+  {
+    $DiskID = $Disk.index
+    $DiskPartScript = @"
+select disk $DiskID
+online disk noerr
+"@
+    $DiskPartScript | diskpart
+  }
+
   # find the drive which contains install media
   $Drive_Letters = Get-WmiObject Win32_LogicalDisk
   ForEach ($DriveLetter in $Drive_Letters.DeviceID) {
