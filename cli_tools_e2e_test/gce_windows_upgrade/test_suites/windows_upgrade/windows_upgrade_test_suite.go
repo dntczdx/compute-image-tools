@@ -193,7 +193,7 @@ func runTest(ctx context.Context, image string, args []string, testType utils.CL
 		if !utils.RunTestCommand("gcloud", []string{
 			"compute", "disks", "create", fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
 			fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID), "--size=10gb",
-			"--image=projects/compute-image-tools/global/images/debian-9-worker-v20200211",
+			"--image=projects/compute-image-tools-test/global/images/empty-ntfs-10g",
 			diskName,
 		}, logger, testCase) {
 			return
@@ -280,18 +280,6 @@ func verifyUpgradedInstance(ctx context.Context, logger *log.Logger, testCase *j
 		utils.Failure(testCase, logger, fmt.Sprintf("Failed to fetch instance object for %v: %v", instanceName, err))
 		return
 	}
-
-	defer func() {
-		// TODO: uncomment
-		/*
-		logger.Printf("Deleting instance `%v`", instanceName)
-		if err := instance.Cleanup(); err != nil {
-			logger.Printf("Instance '%v' failed to clean up: %v", instanceName, err)
-		} else {
-			logger.Printf("Instance '%v' cleaned up.", instanceName)
-		}*/
-		// machine image and snapshot will be cleaned up from test pool after 24h.
-	}()
 
 	logger.Printf("Verifying upgraded instance...")
 
