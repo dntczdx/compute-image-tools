@@ -216,9 +216,9 @@ func handleFailure(ui upgraderInterface, err error) {
 			}
 			return
 		}
-		fmt.Printf("\nNo OS disk attached during the failure. No need to rollback. " +
-			"If the instance doesn't work as expected, please verify that the original " +
-			"OS disk (%v) is attached and whether the instance has started. If necessary, " +
+		fmt.Printf("\nNo OS disk attached during the failure. No need to rollback. "+
+			"If the instance doesn't work as expected, please verify that the original "+
+			"OS disk (%v) is attached and whether the instance has started. If necessary, "+
 			"please manually rollback by using the instructions in the guide..\n\n", u.osDiskURI)
 	}
 
