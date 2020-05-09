@@ -29,8 +29,8 @@ import (
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/paramhelper"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/utils/path"
 	computeUtils "github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/compute"
+	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools_e2e_test/common/utils"
 	daisyCompute "github.com/GoogleCloudPlatform/compute-image-tools/daisy/compute"
-	utils "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/cli_tools"
 	"github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/junitxml"
 	testconfig "github.com/GoogleCloudPlatform/compute-image-tools/go/e2e_test_utils/test_config"
 )
@@ -122,7 +122,7 @@ func runOVFInstanceImportUbuntu3Disks(ctx context.Context, testCase *junitxml.Te
 	props := &ovfInstanceImportTestProperties{
 		instanceName: fmt.Sprintf("test-instance-ubuntu-3-disks-%v", suffix),
 		verificationStartupScript: loadScriptContent(
-			"gce_ovf_import_tests/scripts/ovf_import_test_ubuntu_3_disks.sh", logger),
+			"scripts/ovf_import_test_ubuntu_3_disks.sh", logger),
 		zone:                  testProjectConfig.TestZone,
 		expectedStartupOutput: "All tests passed!",
 		sourceURI:             fmt.Sprintf("gs://%v/ova/ubuntu-1604-three-disks", ovaBucket),
@@ -157,7 +157,7 @@ func runOVFInstanceImportWindows2012R2TwoDisks(ctx context.Context, testCase *ju
 	props := &ovfInstanceImportTestProperties{
 		instanceName: fmt.Sprintf("test-instance-w2k12-r2-%v", suffix),
 		verificationStartupScript: loadScriptContent(
-			"gce_ovf_import_tests/scripts/ovf_import_test_windows_two_disks.ps1", logger),
+			"scripts/ovf_import_test_windows_two_disks.ps1", logger),
 		zone:                  testProjectConfig.TestZone,
 		expectedStartupOutput: "All Tests Passed",
 		sourceURI:             fmt.Sprintf("gs://%v/ova/w2k12-r2", ovaBucket),
