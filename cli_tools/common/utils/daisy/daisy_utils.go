@@ -32,6 +32,7 @@ import (
 const (
 	// BuildIDOSEnvVarName is the os env var name to get build id
 	BuildIDOSEnvVarName   = "BUILD_ID"
+	guestOsFeatureUEFICompatible = "UEFI_COMPATIBLE"
 	translateFailedPrefix = "TranslateFailed"
 )
 

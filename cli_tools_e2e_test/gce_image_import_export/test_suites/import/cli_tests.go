@@ -63,6 +63,16 @@ func CLITestSuite(
 			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import with different network param styles"))
 		imageImportWithSubnetWithoutNetworkSpecifiedTestCase := junitxml.NewTestCase(
 			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import with subnet but without network"))
+		imageImportLinuxUEFITestCase := junitxml.NewTestCase(
+			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux UEFI"))
+		imageImportLinuxNonUEFITestCase := junitxml.NewTestCase(
+			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux non-UEFI"))
+		imageImportLinuxHybridTestCase := junitxml.NewTestCase(
+			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux Hybrid"))
+		imageImportWindowsUEFITestCase := junitxml.NewTestCase(
+			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for windows UEFI"))
+		imageImportWindowsNonUEFITestCase := junitxml.NewTestCase(
+			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for windows non-UEFI"))
 
 		testsMap[testType] = map[*junitxml.TestCase]func(
 			context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, utils.CLITestType){}
@@ -72,6 +82,11 @@ func CLITestSuite(
 		testsMap[testType][imageImportWithRichParamsTestCase] = runImageImportWithRichParamsTest
 		testsMap[testType][imageImportWithDifferentNetworkParamStylesTestCase] = runImageImportWithDifferentNetworkParamStyles
 		testsMap[testType][imageImportWithSubnetWithoutNetworkSpecifiedTestCase] = runImageImportWithSubnetWithoutNetworkSpecified
+		testsMap[testType][imageImportLinuxUEFITestCase] = runImageImportLinuxUEFITest
+		testsMap[testType][imageImportLinuxNonUEFITestCase] = runImageImportLinuxNonUEFITest
+		testsMap[testType][imageImportLinuxHybridTestCase] = runImageImportLinuxHybridTest
+		testsMap[testType][imageImportWindowsUEFITestCase] = runImageImportWindowsUEFITest
+		testsMap[testType][imageImportWindowsNonUEFITestCase] = runImageImportWindowsNonUEFITest
 
 	}
 	utils.CLITestSuite(ctx, tswg, testSuites, logger, testSuiteRegex, testCaseRegex,
@@ -199,7 +214,7 @@ func runImageImportWithRichParamsTest(ctx context.Context, testCase *junitxml.Te
 	}
 
 	runImportTestWithExtraParams(ctx, argsMap[testType], testType, testProjectConfig, imageName,
-		logger, testCase, family, description, labels)
+		logger, testCase, nil, []string{"UEFI_COMPATIBLE"}, family, description, labels)
 }
 
 func runImageImportWithDifferentNetworkParamStyles(ctx context.Context, testCase *junitxml.TestCase,
@@ -273,15 +288,86 @@ func runImageImportWithSubnetWithoutNetworkSpecified(ctx context.Context, testCa
 	runImportTest(ctx, argsMap[testType], testType, testProjectConfig, imageName, logger, testCase)
 }
 
-func runImportTest(ctx context.Context, args []string, testType utils.CLITestType,
-	testProjectConfig *testconfig.Project, imageName string, logger *log.Logger, testCase *junitxml.TestCase) {
+func runImageImportLinuxUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
-	runImportTestWithExtraParams(ctx, args, testType, testProjectConfig, imageName, logger, testCase, "", "", nil)
+	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
+		"rhel-7", "projects/gce-uefi-images/global/images/family/rhel-7", true)
+}
+
+func runImageImportLinuxNonUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
+
+	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
+		"debian-9", "projects/debian-cloud/global/images/family/debian-9", false)
+}
+
+func runImageImportLinuxHybridTest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
+
+	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
+		"ubuntu-1804", "projects/ubuntu-os-cloud/global/images/family/ubuntu-1804-lts", true)
+}
+
+func runImageImportWindowsUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
+
+	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
+		"windows-2019", "projects/gce-uefi-images/global/images/family/windows-2019-core", true)
+}
+
+func runImageImportWindowsNonUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
+
+	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
+		"windows-2019", "projects/windows-cloud/global/images/family/windows-2019-core", false)
+}
+
+func runImageImportUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType, os string, sourceImage string,
+		isUEFICompatible bool) {
+
+	suffix := path.RandString(5)
+	imageName := "e2e-test-image-import-linux-uefi-" + suffix
+
+	argsMap := map[utils.CLITestType][]string{
+		utils.Wrapper: {"-client_id=e2e", fmt.Sprintf("-project=%v", testProjectConfig.TestProjectID),
+			fmt.Sprintf("-image_name=%v", imageName), fmt.Sprintf("-os=%v", os), fmt.Sprintf("-source_image=%v", sourceImage),
+			fmt.Sprintf("-zone=%v", testProjectConfig.TestZone),
+		},
+		utils.GcloudProdWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
+			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
+			fmt.Sprintf("--source-image=%v", sourceImage),
+			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
+		},
+		utils.GcloudLatestWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
+			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
+			fmt.Sprintf("--source-image=%v", sourceImage),
+			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
+		},
+	}
+
+	guestOsFeatureForUEFICompatible := []string{"UEFI_COMPATIBLE"}
+	var expectedGuestOsFeatures, unexpectedGuestOsFeatures []string
+	if isUEFICompatible {
+		expectedGuestOsFeatures = guestOsFeatureForUEFICompatible
+	} else {
+		unexpectedGuestOsFeatures = guestOsFeatureForUEFICompatible
+	}
+
+	runImportTestWithExtraParams(ctx, argsMap[testType], testType, testProjectConfig, imageName, logger, testCase, expectedGuestOsFeatures, unexpectedGuestOsFeatures, "", "", nil)
+}
+
+func runImportTest(ctx context.Context, args []string, testType utils.CLITestType,
+		testProjectConfig *testconfig.Project, imageName string, logger *log.Logger, testCase *junitxml.TestCase) {
+
+	runImportTestWithExtraParams(ctx, args, testType, testProjectConfig, imageName, logger, testCase, nil, nil, "", "", nil)
 }
 
 func runImportTestWithExtraParams(ctx context.Context, args []string, testType utils.CLITestType,
-	testProjectConfig *testconfig.Project, imageName string, logger *log.Logger, testCase *junitxml.TestCase,
-	expectedFamily string, expectedDescription string, expectedLabels []string) {
+		testProjectConfig *testconfig.Project, imageName string, logger *log.Logger, testCase *junitxml.TestCase,
+		expectedGuestOsFeatures []string, unexpectedGuestOsFeatures []string,
+		expectedFamily string, expectedDescription string, expectedLabels []string) {
 
 	cmds := map[utils.CLITestType]string{
 		utils.Wrapper:                   "./gce_vm_image_import",
@@ -298,13 +384,14 @@ func runImportTestWithExtraParams(ctx context.Context, args []string, testType u
 
 	if utils.RunTestForTestType(cmds[testType], args, testType, logger, testCase) {
 		verifyImportedImage(ctx, testCase, testProjectConfig, imageName, logger, expectedFamily,
-			expectedDescription, expectedLabels)
+			expectedDescription, expectedLabels, expectedGuestOsFeatures, unexpectedGuestOsFeatures)
 	}
 }
 
 func verifyImportedImage(ctx context.Context, testCase *junitxml.TestCase,
 	testProjectConfig *testconfig.Project, imageName string, logger *log.Logger,
-	expectedFamily string, expectedDescription string, expectedLabels []string) {
+		expectedFamily string, expectedDescription string, expectedLabels []string,
+		expectedGuestOsFeatures []string, unexpectedGuestOsFeatures []string) {
 
 	logger.Printf("Verifying imported image...")
 	image, err := compute.CreateImageObject(ctx, testProjectConfig.TestProjectID, imageName)
@@ -328,8 +415,30 @@ func verifyImportedImage(ctx context.Context, testCase *junitxml.TestCase,
 		for k, v := range image.Labels {
 			imageLabels = append(imageLabels, k+"="+v)
 		}
-		if !contains(imageLabels, expectedLabels) {
+		if !containsAll(imageLabels, expectedLabels) {
 			utils.Failure(testCase, logger, fmt.Sprintf("Image '%v' labels expect: %v, actual: %v", imageName, strings.Join(expectedLabels, ","), strings.Join(imageLabels, ",")))
+		}
+	}
+
+	if expectedGuestOsFeatures != nil {
+		guestOsFeatures := make([]string, 0, len(image.GuestOsFeatures))
+		for _, f := range image.GuestOsFeatures {
+			guestOsFeatures = append(guestOsFeatures, f.Type)
+		}
+		if !containsAll(guestOsFeatures, expectedGuestOsFeatures) {
+			testCase.WriteFailure("Image '%v' GuestOsFeatures expect: %v, actual: %v", imageName, strings.Join(expectedGuestOsFeatures, ","), strings.Join(guestOsFeatures, ","))
+			logger.Printf("Image '%v' GuestOsFeatures expect: %v, actual: %v", imageName, strings.Join(expectedGuestOsFeatures, ","), strings.Join(guestOsFeatures, ","))
+		}
+	}
+
+	if unexpectedGuestOsFeatures != nil {
+		guestOsFeatures := make([]string, 0, len(image.GuestOsFeatures))
+		for _, f := range image.GuestOsFeatures {
+			guestOsFeatures = append(guestOsFeatures, f.Type)
+		}
+		if containsAny(guestOsFeatures, expectedGuestOsFeatures) {
+			testCase.WriteFailure("Image '%v' GuestOsFeatures unexpect: %v, actual: %v", imageName, strings.Join(unexpectedGuestOsFeatures, ","), strings.Join(guestOsFeatures, ","))
+			logger.Printf("Image '%v' GuestOsFeatures unexpect: %v, actual: %v", imageName, strings.Join(unexpectedGuestOsFeatures, ","), strings.Join(guestOsFeatures, ","))
 		}
 	}
 
@@ -340,7 +449,7 @@ func verifyImportedImage(ctx context.Context, testCase *junitxml.TestCase,
 	}
 }
 
-func contains(arr []string, subarr []string) bool {
+func containsAll(arr []string, subarr []string) bool {
 	for item := range subarr {
 		exists := false
 		for i := range arr {
@@ -354,4 +463,15 @@ func contains(arr []string, subarr []string) bool {
 		}
 	}
 	return true
+}
+
+func containsAny(arr []string, subarr []string) bool {
+	for item := range subarr {
+		for i := range arr {
+			if item == i {
+				return true
+			}
+		}
+	}
+	return false
 }
