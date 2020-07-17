@@ -59,7 +59,7 @@ function Get-MetadataValue {
 
 function Setup-ScriptRunner {
   $metadata_scripts = "${script:os_drive}\Program Files\Google\Compute Engine\metadata_scripts"
-  New-Item "${metadata_scripts}\" -Force -ItemType Directory | Out-Null
+  New-Item "${metadata_scripts}\"  -Force -ItemType Directory | Out-Null
   Copy-Item "${script:components_dir}\run_startup_scripts.cmd" "${metadata_scripts}\run_startup_scripts.cmd" -Verbose
   # This file must be unicode with no trailing new line and exactly match the source.
   (Get-Content "${script:components_dir}\GCEStartup" | Out-String).TrimEnd() | Out-File -Encoding Unicode -NoNewline "${script:os_drive}\Windows\System32\Tasks\GCEStartup"
@@ -115,46 +115,11 @@ function Copy-32bitPackages {
   Copy-Item "${script:components_dir}\*.goo" "${script:os_drive}\ProgramData\GooGet\components\" -Force -Verbose -Recurse
 }
 
-# Detect whether the 2nd disk is GPT partitioned in order to determine whether it's a UEFI boot disk.
-function Detect-UEFI {
-  $partition_style = Get-Disk 1 | Select-Object -Expand PartitionStyle
-  if ($partition_style -eq 'MBR') {
-    Write-Host 'MBR partition detected.'
-    return $false
-  }
-
-  Write-Host "TranslateBootstrap: <serial-output key:'is-uefi-compatible' value:'true'>"
-  if ($partition_style -eq 'GPT') {
-    Write-Host 'GPT partition detected.'
-    Detect-UEFI-File
-    return $true
-  }
-
-  Write-Host "TranslateBootstrap: partition style $partition_style detected. It is neither MBR nor GPT. This image may not boot successfully. Treat it as UEFI-compatible to have a try."
-  return $true
-}
-
-# Detect UEFI file to get more evidence whether it can boot successfully
-function Detect-UEFI-File {
-  $has_uefi_boot_file = $false
-
-  # Drive letter has been assigned. Just iterate.
-  Get-Disk 1 | Get-Partition | ForEach-Object {
-    if (Test-Path "$($_.DriveLetter):\EFI\Boot\bootx64.efi") {
-      Write-Host "UEFI boot file detected."
-      $has_uefi_boot_file = $true
-    }
-  }
-
-  if (!$has_uefi_boot_file) {
-    Write-Host "TranslateBootstrap: UEFI boot file EFI\Boot\bootx64.efi is not found in any partition. This image may not boot successfully."
-  }
-}
-
 try {
   Write-Output 'TranslateBootstrap: Beginning translation bootstrap powershell script.'
   $script:is_x86 = Get-MetadataValue -key 'is_x86'
 
+  $partition_style = Get-Disk 1 | Select-Object -Expand PartitionStyle
   Get-Disk | Where-Object -Property OperationalStatus -EQ "Offline" | Set-Disk -IsOffline $false
   Get-Disk 1 | Get-Partition | ForEach-Object {
     if (-not $_.DriveLetter) {
@@ -230,10 +195,12 @@ try {
   else {
     Copy-32bitPackages
   }
-  $is_uefi_compatible = Detect-UEFI
-  if (!$is_uefi_compatible) {
-    Write-Output 'Resetting bootloader.'
+  if ($partition_style -eq "MBR") {
+    Write-Output 'MBR partition detected. Resetting bootloader.'
     Run-Command bcdboot "${script:os_drive}\Windows" /s $bcd_drive
+  }
+  else {
+    Write-Output 'GPT partition detected.'
   }
 
   # Turn off startup animation which breaks headless installation.

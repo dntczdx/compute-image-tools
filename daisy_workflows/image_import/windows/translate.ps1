@@ -51,7 +51,7 @@ function Get-MetadataValue {
       return $default
     }
     else {
-      Write-Host "Failed to retrieve value for $key."
+      Write-Output "Failed to retrieve value for $key."
       return $null
     }
   }

@@ -92,14 +92,6 @@ NotifyExit() {
     fi
 }
 
-DetectUEFI() {
-    disk_types=$(fdisk -l /dev/sdb -o type)
-    efi_type="EFI System"
-    case "$disk_types" in
-      *"$efi_type"*) logger -p daemon.info "${prefix}Status: <serial-output key:'is-uefi-compatible' value:'true'>" ;;
-    esac
-}
-
 logger -p daemon.info "Status: Starting bootstrap.sh"
 
 metadata_url="http://metadata.google.internal/computeMetadata"
@@ -137,8 +129,6 @@ logger -p daemon.info "Status: Making script $path_script executable"
 chmod +x "$path_script"
 
 CheckPython3Installation
-
-DetectUEFI
 
 logger -p daemon.info "Status: Running $path_script"
 "$path_script"
