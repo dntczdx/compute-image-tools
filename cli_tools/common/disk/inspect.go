@@ -34,6 +34,7 @@ type Inspector interface {
 
 // InspectionResult contains the partition and boot-related properties of a disk.
 type InspectionResult struct {
+	HasUEFIPartition bool
 }
 
 // NewInspector creates an Inspector that can inspect GCP disks.
@@ -57,5 +58,11 @@ type defaultInspector struct {
 func (inspector defaultInspector) Inspect(reference string) (InspectionResult, error) {
 	inspector.wf.AddVar("pd_uri", reference)
 	err := inspector.wf.Run(context.Background())
-	return InspectionResult{}, err
+	r := InspectionResult{}
+
+	if inspector.wf.GetSerialConsoleOutputValue("has_uefi_partition") == "true" {
+		r.HasUEFIPartition = true
+	}
+
+	return r, err
 }

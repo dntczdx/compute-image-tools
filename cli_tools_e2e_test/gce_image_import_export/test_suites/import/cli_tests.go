@@ -64,15 +64,15 @@ func CLITestSuite(
 		imageImportWithSubnetWithoutNetworkSpecifiedTestCase := junitxml.NewTestCase(
 			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import with subnet but without network"))
 		imageImportLinuxUEFITestCase := junitxml.NewTestCase(
-			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux UEFI"))
+			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import UEFI test for linux UEFI"))
 		imageImportLinuxNonUEFITestCase := junitxml.NewTestCase(
-			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux non-UEFI"))
+			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import UEFI test for linux non-UEFI"))
 		imageImportLinuxHybridTestCase := junitxml.NewTestCase(
-			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for linux Hybrid"))
+			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import UEFI test for linux Hybrid"))
 		imageImportWindowsUEFITestCase := junitxml.NewTestCase(
-			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for windows UEFI"))
+			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import UEFI test for windows UEFI"))
 		imageImportWindowsNonUEFITestCase := junitxml.NewTestCase(
-			testSuiteName, fmt.Sprintf("[%v][ImageImport] %v", testType, "Import UEFI test for windows non-UEFI"))
+			testSuiteName, fmt.Sprintf("[%v][CLI] %v", testType, "Import UEFI test for windows non-UEFI"))
 
 		testsMap[testType] = map[*junitxml.TestCase]func(
 			context.Context, *junitxml.TestCase, *log.Logger, *testconfig.Project, utils.CLITestType){}
@@ -292,39 +292,39 @@ func runImageImportLinuxUEFITest(ctx context.Context, testCase *junitxml.TestCas
 		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
-		"rhel-7", "projects/gce-uefi-images/global/images/family/rhel-7", true)
+		"rhel-7", "gs://compute-image-tools-test-resources/uefi/linux-uefi-rhel-7.vmdk", true)
 }
 
 func runImageImportLinuxNonUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
 		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
-		"debian-9", "projects/debian-cloud/global/images/family/debian-9", false)
+		"debian-9", "gs://compute-image-tools-test-resources/uefi/linux-nonuefi-debian-9.vmdk", false)
 }
 
 func runImageImportLinuxHybridTest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
 		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
-		"ubuntu-1804", "projects/ubuntu-os-cloud/global/images/family/ubuntu-1804-lts", true)
+		"ubuntu-1804", "gs://compute-image-tools-test-resources/uefi/linux-hybrid-ubuntu-1804.vmdk", true)
 }
 
 func runImageImportWindowsUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
 		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
-		"windows-2019", "projects/gce-uefi-images/global/images/family/windows-2019-core", true)
+		"windows-2019", "gs://compute-image-tools-test-resources/uefi/windows-uefi-2019.vmdk", true)
 }
 
 func runImageImportWindowsNonUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
 		testProjectConfig *testconfig.Project, testType utils.CLITestType) {
 
 	runImageImportUEFITest(ctx, testCase, logger, testProjectConfig, testType,
-		"windows-2019", "projects/windows-cloud/global/images/family/windows-2019-core", false)
+		"windows-2019", "gs://compute-image-tools-test-resources/uefi/windows-nonuefi-2019.vmdk", false)
 }
 
 func runImageImportUEFITest(ctx context.Context, testCase *junitxml.TestCase, logger *log.Logger,
-		testProjectConfig *testconfig.Project, testType utils.CLITestType, os string, sourceImage string,
+		testProjectConfig *testconfig.Project, testType utils.CLITestType, os string, sourceFile string,
 		isUEFICompatible bool) {
 
 	suffix := path.RandString(5)
@@ -332,18 +332,18 @@ func runImageImportUEFITest(ctx context.Context, testCase *junitxml.TestCase, lo
 
 	argsMap := map[utils.CLITestType][]string{
 		utils.Wrapper: {"-client_id=e2e", fmt.Sprintf("-project=%v", testProjectConfig.TestProjectID),
-			fmt.Sprintf("-image_name=%v", imageName), fmt.Sprintf("-os=%v", os), fmt.Sprintf("-source_image=%v", sourceImage),
-			fmt.Sprintf("-zone=%v", testProjectConfig.TestZone),
+			fmt.Sprintf("-image_name=%v", imageName), fmt.Sprintf("-os=%v", os), fmt.Sprintf("-source_file=%v", sourceFile),
+			fmt.Sprintf("-zone=%v", testProjectConfig.TestZone), "-inspect",
 		},
 		utils.GcloudProdWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
 			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
-			fmt.Sprintf("--source-image=%v", sourceImage),
-			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
+			fmt.Sprintf("--source-file=%v", sourceFile),
+			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone), "--inspect",
 		},
 		utils.GcloudLatestWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
 			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
-			fmt.Sprintf("--source-image=%v", sourceImage),
-			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone),
+			fmt.Sprintf("--source-file=%v", sourceFile),
+			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone), "--inspect",
 		},
 	}
 

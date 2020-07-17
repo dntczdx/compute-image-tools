@@ -14,6 +14,15 @@
 # limitations under the License.
 
 # Example of communicating a key-value pair back to Daisy:
-#   print("Status: <serial-output key:'partition_scheme' value:'mbr'>")
+#
+
+import os
+
+os.system('fdisk -l /dev/sdb -o type')
+stream = os.popen('fdisk -l /dev/sdb -o type')
+output = stream.read()
+output
+if "EFI System" in output:
+  print("Status: <serial-output key:'has_uefi_partition' value:'true'>")
 
 print("Success: Done!")
