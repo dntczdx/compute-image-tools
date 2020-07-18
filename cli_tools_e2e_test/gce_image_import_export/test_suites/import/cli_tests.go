@@ -328,19 +328,19 @@ func runImageImportUEFITest(ctx context.Context, testCase *junitxml.TestCase, lo
 		isUEFICompatible bool) {
 
 	suffix := path.RandString(5)
-	imageName := "e2e-test-image-import-linux-uefi-" + suffix
+	imageName := "e2e-test-image-import-" + suffix
 
 	argsMap := map[utils.CLITestType][]string{
 		utils.Wrapper: {"-client_id=e2e", fmt.Sprintf("-project=%v", testProjectConfig.TestProjectID),
 			fmt.Sprintf("-image_name=%v", imageName), fmt.Sprintf("-os=%v", os), fmt.Sprintf("-source_file=%v", sourceFile),
 			fmt.Sprintf("-zone=%v", testProjectConfig.TestZone), "-inspect",
 		},
-		utils.GcloudProdWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
+		utils.GcloudProdWrapperLatest: {"compute", "images", "import", imageName, "--quiet",
 			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
 			fmt.Sprintf("--source-file=%v", sourceFile),
 			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone), "--inspect",
 		},
-		utils.GcloudLatestWrapperLatest: {"beta", "compute", "images", "import", imageName, "--quiet",
+		utils.GcloudLatestWrapperLatest: {"compute", "images", "import", imageName, "--quiet",
 			"--docker-image-tag=latest", fmt.Sprintf("--os=%v", os), fmt.Sprintf("--project=%v", testProjectConfig.TestProjectID),
 			fmt.Sprintf("--source-file=%v", sourceFile),
 			fmt.Sprintf("--zone=%v", testProjectConfig.TestZone), "--inspect",

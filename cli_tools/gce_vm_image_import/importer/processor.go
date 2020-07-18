@@ -55,9 +55,6 @@ func (d defaultProcessorProvider) provide(pd persistentDisk) (processor, error) 
 		} else {
 			log.Printf("Inspection result=%v", inspectionResult)
 		}
-
-		// Mark the image "UEFI_COMATIBLE" when either we detected a UEFI partition or the user enforced it.
-		d.ImportArguments.UefiCompatible = inspectionResult.HasUEFIPartition || d.ImportArguments.UefiCompatible
 	}
 	return newBootableDiskProcessor(d.ImportArguments, pd)
 }

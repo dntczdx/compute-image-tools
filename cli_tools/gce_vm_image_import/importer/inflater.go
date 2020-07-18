@@ -46,7 +46,7 @@ const (
 //
 // Implementers can expose detailed logs using the traceLogs() method.
 type inflater interface {
-	inflate() (persistentDisk, error)
+	inflate(pir imagefile.PreInspectionResult) (persistentDisk, error)
 	traceLogs() []string
 	cancel(reason string) bool
 }
@@ -56,10 +56,15 @@ type inflater interface {
 type daisyInflater struct {
 	wf              *daisy.Workflow
 	inflatedDiskURI string
+	uefiCompatible 	bool
 	serialLogs      []string
 }
 
-func (inflater *daisyInflater) inflate() (persistentDisk, error) {
+func (inflater *daisyInflater) inflate(pir imagefile.PreInspectionResult) (persistentDisk, error) {
+	if inflater.uefiCompatible || pir.HasUEFIPartition {
+		daisy_utils.UpdateToUEFICompatible(inflater.wf)
+	}
+
 	err := inflater.wf.Run(context.Background())
 	if inflater.wf.Logger != nil {
 		inflater.serialLogs = inflater.wf.Logger.ReadSerialPortLogs()
@@ -120,6 +125,7 @@ func createDaisyInflater(args ImportArguments, fileInspector imagefile.Inspector
 	return &daisyInflater{
 		wf:              wf,
 		inflatedDiskURI: fmt.Sprintf("zones/%s/disks/%s", args.Zone, diskName),
+		uefiCompatible:  args.UefiCompatible,
 	}, nil
 }
 

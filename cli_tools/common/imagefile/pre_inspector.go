@@ -12,11 +12,11 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-package disk
+package imagefile
 
 import (
 	"context"
-	"path"
+	"log"
 
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/daisycommon"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/gce_vm_image_import/importer"
@@ -28,37 +28,56 @@ const (
 )
 
 // Inspector finds partition and boot-related properties for a disk.
-type Inspector interface {
+type PreInspector interface {
 	// Inspect finds partition and boot-related properties for a disk and
-	// returns an InspectionResult. The reference is implementation specific.
-	Inspect(reference string) (InspectionResult, error)
+	// returns an PreInspectionResult. The reference is implementation specific.
+	Inspect(reference string) (PreInspectionResult, error)
 }
 
-// InspectionResult contains the partition and boot-related properties of a disk.
-type InspectionResult struct {
+// PreInspectionResult contains the partition and boot-related properties of a disk.
+type PreInspectionResult struct {
+	HasUEFIPartition bool
 }
 
-// NewInspector creates an Inspector that can inspect GCP disks.
-func NewInspector(wfAttributes daisycommon.WorkflowAttributes, args importer.ImportArguments) (Inspector, error) {
-	wf, err := daisy.NewFromFile(path.Join(args.WorkflowDir, workflowFile))
+// NewPreInspector creates an PreInspector that can inspect GCS image file.
+func NewPreInspector(wfAttributes daisycommon.WorkflowAttributes, args importer.ImportArguments) (PreInspector, error) {
+	wf, err := daisy.NewFromFile(workflowFile)
 	if err != nil {
 		return nil, err
 	}
 	daisycommon.SetWorkflowAttributes(wf, wfAttributes)
-	return defaultInspector{wf}, nil
+	return defaultPreInspector{wf, args}, nil
 }
 
-// defaultInspector implements disk.Inspector using a Daisy workflow.
-type defaultInspector struct {
+// defaultPreInspector implements disk.Inspector using a Daisy workflow.
+type defaultPreInspector struct {
 	wf   *daisy.Workflow
+	args importer.ImportArguments
 }
 
 // Inspect finds partition and boot-related properties for a GCP persistent disk, and
-// returns an InspectionResult. `reference` is a fully-qualified PD URI, such as
+// returns an PreInspectionResult. `reference` is a fully-qualified PD URI, such as
 // "projects/project-name/zones/us-central1-a/disks/disk-name".
-func (inspector defaultInspector) Inspect(reference string) (InspectionResult, error) {
+func (inspector defaultPreInspector) Inspect(reference string) (PreInspectionResult, error) {
+	if !inspector.args.Inspect {
+		return PreInspectionResult{}, nil
+	}
+
+	log.Printf("Running experimental pre inspections on %v.", reference)
+
 	inspector.wf.AddVar("pd_uri", reference)
 	err := inspector.wf.Run(context.Background())
-	ir := InspectionResult{}
+	ir := PreInspectionResult{}
+
+	if inspector.wf.GetSerialConsoleOutputValue("has_uefi_partition") == "true" {
+		ir.HasUEFIPartition = true
+	}
+
+	if err != nil {
+		log.Printf("Inspection error=%v", err)
+	} else {
+		log.Printf("Inspection result=%v", ir)
+	}
+
 	return ir, err
 }

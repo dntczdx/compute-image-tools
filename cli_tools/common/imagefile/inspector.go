@@ -40,6 +40,9 @@ type Metadata struct {
 
 	// FileFormat is the format used for encoding the VM disk.
 	FileFormat string
+
+	// HasEFIPartition
+	HasEFIPartition bool
 }
 
 // Inspector returns metadata about image files.
@@ -87,14 +90,18 @@ func (inspector gcsInspector) inspectOnce(ctx context.Context, gcsURI string) (m
 	if !files.Exists(absPath) {
 		return metadata, fmt.Errorf("the file %q was not found", gcsURI)
 	}
+
 	imageInfo, err := inspector.qemuClient.GetInfo(ctx, absPath)
 	if err != nil {
 		return metadata, err
 	}
+
+
 	return Metadata{
 		PhysicalSizeGB: bytesToGB(imageInfo.ActualSizeBytes),
 		VirtualSizeGB:  bytesToGB(imageInfo.VirtualSizeBytes),
 		FileFormat:     imageInfo.Format,
+		HasEFIPartition: false, // TODO
 	}, nil
 }
 

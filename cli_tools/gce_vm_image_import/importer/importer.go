@@ -44,7 +44,11 @@ func NewImporter(args ImportArguments, client daisycompute.Client) (Importer, er
 		return nil, err
 	}
 
-	inspector, err := disk.NewInspector(args.DaisyAttrs())
+	inspector, err := disk.NewInspector(args.DaisyAttrs(), args)
+	if err != nil {
+		return nil, err
+	}
+	preInspector, err := imagefile.NewPreInspector(args.DaisyAttrs(), args)
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +58,7 @@ func NewImporter(args ImportArguments, client daisycompute.Client) (Importer, er
 		zone:              args.Zone,
 		timeout:           args.Timeout,
 		preValidator:      newPreValidator(args, client),
+		preInspector:      preInspector,
 		inflater:          inflater,
 		processorProvider: defaultProcessorProvider{args, client, inspector},
 		traceLogs:         []string{},
@@ -67,6 +72,7 @@ type importer struct {
 	project, zone     string
 	pd                persistentDisk
 	preValidator      validator
+	preInspector      imagefile.PreInspector
 	inflater          inflater
 	processorProvider processorProvider
 	traceLogs         []string
@@ -86,7 +92,12 @@ func (i *importer) Run(ctx context.Context) (loggable service.Loggable, err erro
 
 	defer i.cleanupDisk()
 
-	if err := i.runInflate(ctx); err != nil {
+	ir, err := i.runPreInspection(ctx)
+	if err != nil {
+		return i.buildLoggable(), err
+	}
+
+	if err := i.runInflate(ctx, ir); err != nil {
 		return i.buildLoggable(), err
 	}
 
@@ -98,10 +109,18 @@ func (i *importer) Run(ctx context.Context) (loggable service.Loggable, err erro
 	return i.buildLoggable(), err
 }
 
-func (i *importer) runInflate(ctx context.Context) (err error) {
+func (i *importer) runPreInspection(ctx context.Context) (pir imagefile.PreInspectionResult, err error) {
+	i.runStep(ctx, func() error {
+		pir, err = i.preInspector.Inspect(i.pd.uri)
+		return err
+	}, i.inflater.cancel, i.inflater.traceLogs)
+	return pir, err
+}
+
+func (i *importer) runInflate(ctx context.Context, pir imagefile.PreInspectionResult) (err error) {
 	return i.runStep(ctx, func() error {
 		var err error
-		i.pd, err = i.inflater.inflate()
+		i.pd, err = i.inflater.inflate(pir)
 		return err
 	}, i.inflater.cancel, i.inflater.traceLogs)
 }
