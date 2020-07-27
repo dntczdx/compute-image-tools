@@ -83,7 +83,7 @@ type persistentDisk struct {
 	sourceType string
 }
 
-func createDaisyInflater(args ImportArguments, fileInspector imagefile.Inspector) (inflater, error) {
+func createDaisyInflater(args ImportArguments, metadata *imagefile.Metadata) (inflater, error) {
 	diskName := "disk-" + args.ExecutionID
 	var wfPath string
 	var vars map[string]string
@@ -97,7 +97,7 @@ func createDaisyInflater(args ImportArguments, fileInspector imagefile.Inspector
 		inflationDiskIndex = 0 // Workflow only uses one disk.
 	} else {
 		wfPath = inflateFilePath
-		vars = createDaisyVarsForFile(args, fileInspector, diskName)
+		vars = createDaisyVarsForFile(args, metadata, diskName)
 		inflationDiskIndex = 1 // First disk is for the worker
 	}
 
@@ -156,7 +156,7 @@ func (inflater *daisyInflater) cancel(reason string) bool {
 }
 
 func createDaisyVarsForFile(args ImportArguments,
-	fileInspector imagefile.Inspector, diskName string) map[string]string {
+	metadata *imagefile.Metadata, diskName string) map[string]string {
 	vars := map[string]string{
 		"source_disk_file": args.Source.Path(),
 		"import_network":   args.Network,
@@ -168,12 +168,9 @@ func createDaisyVarsForFile(args ImportArguments,
 	// disks sufficient to hold the disk file and the inflated disk. If inspection fails,
 	// then the default values in the daisy workflow will be used. The scratch disk gets
 	// a padding factor to account for filesystem overhead.
-	deadline, cancelFunc := context.WithDeadline(context.Background(), time.Now().Add(inspectionTimeout))
-	defer cancelFunc()
-	metadata, err := fileInspector.Inspect(deadline, args.Source.Path())
-	if err == nil {
-		vars["inflated_disk_size_gb"] = fmt.Sprintf("%d", calculateInflatedSize(metadata))
-		vars["scratch_disk_size_gb"] = fmt.Sprintf("%d", calculateScratchDiskSize(metadata))
+	if metadata != nil {
+		vars["inflated_disk_size_gb"] = fmt.Sprintf("%d", calculateInflatedSize(*metadata))
+		vars["scratch_disk_size_gb"] = fmt.Sprintf("%d", calculateScratchDiskSize(*metadata))
 	}
 	return vars
 }

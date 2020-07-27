@@ -40,13 +40,16 @@ type Metadata struct {
 
 	// FileFormat is the format used for encoding the VM disk.
 	FileFormat string
+
+	// HasUEFIPartition indicates whether the disk have a UEFI partition.
+	HasUEFIPartition bool
 }
 
 // Inspector returns metadata about image files.
 type Inspector interface {
 	// Inspect returns Metadata for the image file associated
 	// with a reference. IO operations will be retried until the context is cancelled.
-	Inspect(ctx context.Context, reference string) (Metadata, error)
+	Inspect(ctx context.Context, reference, workflowDir string) (Metadata, error)
 }
 
 // NewGCSInspector returns an inspector that inspects image
@@ -54,26 +57,28 @@ type Inspector interface {
 // a GCS URI to the file to be inspected.
 func NewGCSInspector() Inspector {
 	return gcsInspector{
-		qemuClient: NewInfoClient(),
-		fuseClient: gcsfuse.NewClient()}
+		qemuClient:    NewInfoClient(),
+		guestfsClient: NewBootInfoClient(),
+		fuseClient:    gcsfuse.NewClient()}
 }
 
 // gcsInspector implements inspector using qemu-img gcsfuse.
 type gcsInspector struct {
-	qemuClient InfoClient
-	fuseClient gcsfuse.Client
+	qemuClient    InfoClient
+	guestfsClient BootInfoClient
+	fuseClient    gcsfuse.Client
 }
 
-func (inspector gcsInspector) Inspect(ctx context.Context, gcsURI string) (metadata Metadata, err error) {
+func (inspector gcsInspector) Inspect(ctx context.Context, gcsURI, workflowDir string) (metadata Metadata, err error) {
 	operation := func() error {
-		metadata, err = inspector.inspectOnce(ctx, gcsURI)
+		metadata, err = inspector.inspectOnce(ctx, gcsURI, workflowDir)
 		return err
 	}
 	return metadata, backoff.Retry(operation,
 		backoff.WithContext(backoff.NewConstantBackOff(50*time.Millisecond), ctx))
 }
 
-func (inspector gcsInspector) inspectOnce(ctx context.Context, gcsURI string) (metadata Metadata, err error) {
+func (inspector gcsInspector) inspectOnce(ctx context.Context, gcsURI, workflowDir string) (metadata Metadata, err error) {
 	bucket, object, err := storage.GetGCSObjectPathElements(gcsURI)
 	if err != nil {
 		return metadata, err
@@ -91,11 +96,19 @@ func (inspector gcsInspector) inspectOnce(ctx context.Context, gcsURI string) (m
 	if err != nil {
 		return metadata, err
 	}
-	return Metadata{
+	metadata = Metadata{
 		PhysicalSizeGB: bytesToGB(imageInfo.ActualSizeBytes),
 		VirtualSizeGB:  bytesToGB(imageInfo.VirtualSizeBytes),
 		FileFormat:     imageInfo.Format,
-	}, nil
+	}
+
+	bootInfo, err := inspector.guestfsClient.GetInfo(ctx, absPath, workflowDir)
+	if err != nil {
+		return metadata, err
+	}
+	metadata.HasUEFIPartition = bootInfo.HasUEFIPartition
+
+	return metadata, nil
 }
 
 // bytesToGB rounds up to the nearest GB.

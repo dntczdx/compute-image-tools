@@ -13,7 +13,8 @@
 # limitations under the License.
 
 FROM launcher.gcr.io/google/debian9
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -q -y qemu-utils gnupg ca-certificates
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -q -y qemu-utils gnupg ca-certificates python3-guestfs python3
+RUN python3 --version
 RUN echo "deb http://packages.cloud.google.com/apt gcsfuse-stretch main" > /etc/apt/sources.list.d/gcsfuse.list
 # gcsfuse, installed using instructions from:
 #  https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/installing.md

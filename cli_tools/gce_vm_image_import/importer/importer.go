@@ -17,6 +17,7 @@ package importer
 import (
 	"context"
 	"github.com/GoogleCloudPlatform/compute-image-tools/cli_tools/common/disk"
+	"fmt"
 	"log"
 	"path"
 	"sync"
@@ -38,13 +39,22 @@ type Importer interface {
 
 // NewImporter constructs an Importer instance.
 func NewImporter(args ImportArguments, client daisycompute.Client) (Importer, error) {
+	// Try inspecting image file. If failed, the following steps will use default values.
+	var metadata *imagefile.Metadata
+	if !isImage(args.Source) {
+		metadata = getFileImageMetadata(args)
+		if metadata != nil {
+			args.UefiCompatible = args.UefiCompatible || metadata.HasUEFIPartition
+			fmt.Println(">>>metadata.HasUEFIPartition: ", metadata.HasUEFIPartition)
+		}
+	}
 
-	inflater, err := createDaisyInflater(args, imagefile.NewGCSInspector())
+	inflater, err := createDaisyInflater(args, metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	inspector, err := disk.NewInspector(args.DaisyAttrs())
+	diskInspector, err := disk.NewInspector(args.DaisyAttrs())
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +65,7 @@ func NewImporter(args ImportArguments, client daisycompute.Client) (Importer, er
 		timeout:           args.Timeout,
 		preValidator:      newPreValidator(args, client),
 		inflater:          inflater,
-		processorProvider: defaultProcessorProvider{args, client, inspector},
+		processorProvider: defaultProcessorProvider{args, client, diskInspector},
 		traceLogs:         []string{},
 		diskClient:        client,
 	}, nil
@@ -67,6 +77,7 @@ type importer struct {
 	project, zone     string
 	pd                persistentDisk
 	preValidator      validator
+	fileInspector     imagefile.Inspector
 	inflater          inflater
 	processorProvider processorProvider
 	traceLogs         []string
@@ -178,4 +189,15 @@ func (i *importer) buildLoggable() service.Loggable {
 // diskClient is the subset of the GCP API that is used by importer.
 type diskClient interface {
 	DeleteDisk(project, zone, uri string) error
+}
+
+func getFileImageMetadata(args ImportArguments) (*imagefile.Metadata) {
+	fileInspector := imagefile.NewGCSInspector()
+	deadline, cancelFunc := context.WithDeadline(context.Background(), time.Now().Add(inspectionTimeout))
+	defer cancelFunc()
+	metadata, err := fileInspector.Inspect(deadline, args.Source.Path(), args.WorkflowDir)
+	if err != nil {
+		return nil
+	}
+	return &metadata
 }
