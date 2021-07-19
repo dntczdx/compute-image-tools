@@ -5,10 +5,10 @@ options:
 steps:
 # Build gce_vm_image_import.
 - name: 'docker'
-  args: ['docker', 'pull', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:latest']
+  args: ['docker', 'pull', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:release']
   env: ['CGO_ENABLED=0']
 - name: 'docker'
-  args: ['docker', 'image', 'tag', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:latest', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:release']
+  args: ['docker', 'image', 'tag', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:release', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:release']
   env: ['CGO_ENABLED=0']
 - name: 'docker'
   args: ['docker', 'push', 'us-east1-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:release']
