@@ -4,6 +4,6 @@ options:
 
 steps:
 # Build gce_vm_image_import.
-- name: 'gcloud'
+- name: 'google/cloud-sdk'
   args: ['gcloud', 'workflows', 'execute', 'workflows-1', '--data={}']
   env: ['CGO_ENABLED=0']
