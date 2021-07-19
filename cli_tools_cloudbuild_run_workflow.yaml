@@ -1,17 +1,6 @@
 timeout: 4500s
 
 options:
-  env:
-  - GO111MODULE=auto
-  - GOPROXY=https://proxy.golang.org
-  volumes:
-  - name: go-pkg
-    path: /go/pkg
-  - name: go-src
-    path: /go/src
-
-substitutions:
-  _RELEASE: 'latest'
 
 steps:
 # Build gce_vm_image_import.
