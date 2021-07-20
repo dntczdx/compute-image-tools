@@ -12,7 +12,7 @@ steps:
   args: ['docker', 'tag', gcr.io/$PROJECT_ID/$_TOOL_NAME:release, $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:$COMMIT_SHA]
   env: ['CGO_ENABLED=0']
 - name: 'docker'
-  args: ['docker', 'push', $_REGION-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:$COMMIT_SHA]
+  args: ['docker', 'push', $_REGION-docker.pkg.dev/tzz-noogler-3/wrappers/$_TOOL_NAME:$COMMIT_SHA]
   env: ['CGO_ENABLED=0']
 # Tag with 'release' & push
 - name: 'docker'
