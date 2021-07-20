@@ -15,6 +15,9 @@ substitutions:
 
 steps:
 # Build daisy.
+- name: 'google/cloud-sdk:alpine'
+  args: [ 'gcloud', 'auth', 'list' ]
+  env: [ 'CGO_ENABLED=0' ]
 - name: 'golang'
   dir: 'daisy/cli'
   args: ['go', 'build', '-o=/workspace/linux/daisy']
