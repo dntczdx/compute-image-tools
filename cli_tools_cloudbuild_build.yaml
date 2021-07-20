@@ -15,9 +15,6 @@ substitutions:
 
 steps:
 # Build daisy.
-- name: 'google/cloud-sdk:alpine'
-  args: [ 'gcloud', 'auth', 'list' ]
-  env: [ 'CGO_ENABLED=0' ]
 - name: 'golang'
   dir: 'daisy/cli'
   args: ['go', 'build', '-o=/workspace/linux/daisy']
@@ -37,6 +34,10 @@ steps:
   - --destination=gcr.io/$PROJECT_ID/daisy:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=daisy.Dockerfile
+
+# TODO: remove: Copy Linux binaries to GCS
+- name: 'gcr.io/cloud-builders/gsutil'
+  args: ['cp', '/workspace/linux/*', 'gs://$PROJECT_ID/$_RELEASE/linux/']
 
 # Build gce_image_publish.
 - name: 'golang'
