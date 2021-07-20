@@ -1,0 +1,23 @@
+timeout: 4500s
+
+options:
+
+steps:
+# Pull from main.
+- name: 'docker'
+  args: ['docker', 'pull', gcr.io/$PROJECT_ID/$_TOOL_NAME:release]
+  env: ['CGO_ENABLED=0']
+# Tag with commit SHA & push.
+- name: 'docker'
+  args: ['docker', 'tag', gcr.io/$PROJECT_ID/$_TOOL_NAME:release, $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:$COMMIT_SHA]
+  env: ['CGO_ENABLED=0']
+- name: 'docker'
+  args: ['docker', 'push', $_REGION-docker.pkg.dev/tzz-noogler-3/wrappers/gce_vm_image_import:$COMMIT_SHA]
+  env: ['CGO_ENABLED=0']
+# Tag with 'release' & push
+- name: 'docker'
+  args: ['docker', 'tag', gcr.io/$PROJECT_ID/$_TOOL_NAME:release, $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:release]
+  env: ['CGO_ENABLED=0']
+- name: 'docker'
+  args: ['docker', 'push', $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:release]
+  env: ['CGO_ENABLED=0']
