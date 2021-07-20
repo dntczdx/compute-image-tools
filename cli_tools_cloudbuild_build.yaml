@@ -31,6 +31,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/daisy:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/daisy:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/daisy:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=daisy.Dockerfile
 
@@ -51,6 +52,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_image_publish:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_image_publish:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_image_publish:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_image_publish.Dockerfile
 
@@ -67,6 +69,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_export:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_export:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_export:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_export.Dockerfile
 
@@ -89,6 +92,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_vm_image_import:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_vm_image_import:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_vm_image_import:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_vm_image_import.Dockerfile
 
@@ -101,6 +105,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_onestep_image_import:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_onestep_image_import:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_onestep_image_import:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_onestep_image_import.Dockerfile
 
@@ -113,6 +118,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_vm_image_export:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_vm_image_export:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_vm_image_export:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_vm_image_export.Dockerfile
 
@@ -125,6 +131,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_ovf_import:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_ovf_import:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_ovf_import:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_ovf_import.Dockerfile
 
@@ -137,6 +144,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_ovf_export:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_ovf_export:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_ovf_export:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_ovf_export.Dockerfile
 
@@ -149,6 +157,7 @@ steps:
   args:
   - --destination=gcr.io/$PROJECT_ID/gce_windows_upgrade:$_RELEASE
   - --destination=gcr.io/$PROJECT_ID/gce_windows_upgrade:$COMMIT_SHA
+  - --destination=gcr.io/$PROJECT_ID/gce_windows_upgrade:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=gce_windows_upgrade.Dockerfile
 
