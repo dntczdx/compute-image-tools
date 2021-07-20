@@ -14,6 +14,10 @@ substitutions:
   _RELEASE: 'latest'
 
 steps:
+# Make binaries world-readable.
+- name: 'gcr.io/cloud-builders/gsutil'
+  args: ['-m', 'acl', '-r', 'ch', '-u', 'AllUsers:R', 'gs://$PROJECT_ID/$_RELEASE/*']
+
 # Build daisy.
 - name: 'golang'
   dir: 'daisy/cli'
@@ -34,10 +38,6 @@ steps:
   - --destination=gcr.io/$PROJECT_ID/daisy:$_WORKFLOW_EXECUTION_ID
   - --context=/workspace
   - --dockerfile=daisy.Dockerfile
-
-# TODO: remove: Copy Linux binaries to GCS
-- name: 'gcr.io/cloud-builders/gsutil'
-  args: ['cp', '/workspace/linux/*', 'gs://$PROJECT_ID/$_RELEASE/linux/']
 
 # Build gce_image_publish.
 - name: 'golang'
