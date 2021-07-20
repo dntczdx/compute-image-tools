@@ -7,3 +7,4 @@ steps:
 - name: 'google/cloud-sdk:alpine'
   args: ['gcloud', 'workflows', 'execute', 'workflow-1', '--data={}']
   env: ['CGO_ENABLED=0']
+#TODO: --data define release phase

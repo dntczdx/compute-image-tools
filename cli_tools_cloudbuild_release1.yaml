@@ -9,10 +9,10 @@ steps:
   env: ['CGO_ENABLED=0']
 # Tag with commit SHA & push.
 - name: 'docker'
-  args: ['docker', 'tag', gcr.io/$PROJECT_ID/$_TOOL_NAME:release, $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:$COMMIT_SHA]
+  args: ['docker', 'tag', gcr.io/$PROJECT_ID/$_TOOL_NAME:release, $_REGION-docker.pkg.dev/$PROJECT_ID/wrappers/$_TOOL_NAME:$_WORKFLOW_EXECUTION_ID]
   env: ['CGO_ENABLED=0']
 - name: 'docker'
-  args: ['docker', 'push', $_REGION-docker.pkg.dev/tzz-noogler-3/wrappers/$_TOOL_NAME:$COMMIT_SHA]
+  args: ['docker', 'push', $_REGION-docker.pkg.dev/tzz-noogler-3/wrappers/$_TOOL_NAME:$_WORKFLOW_EXECUTION_ID]
   env: ['CGO_ENABLED=0']
 # Tag with 'release' & push
 - name: 'docker'
